@@ -78,7 +78,7 @@ def get_argparser():
                         help="random seed (default: 1)")
     parser.add_argument("--print_interval", type=int, default=10,
                         help="print interval of loss (default: 10)")
-    parser.add_argument("--val_interval", type=int, default=10,
+    parser.add_argument("--val_interval", type=int, default=100,
                         help="epoch interval for eval (default: 100)")
     parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
@@ -209,7 +209,7 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
         img_id = 0
 
     with torch.no_grad():
-        for i, (images, labels) in tqdm(enumerate(loader)):
+        for i, (images, labels) in enumerate(loader):
 
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
@@ -328,7 +328,7 @@ def main():
             "scheduler_state": scheduler.state_dict(),
             "best_score": best_score,
         }, path)
-        print("Model saved as %s" % path)
+        # print("Model saved as %s" % path)
 
     utils.mkdir('checkpoints')
     # Restore
@@ -372,7 +372,7 @@ def main():
         print("Train starting")
         model.train()
         cur_epochs += 1
-        for (images, labels) in tqdm(train_loader):
+        for (images, labels) in train_loader:
             cur_itrs += 1
 
             images = images.to(device, dtype=torch.float32)

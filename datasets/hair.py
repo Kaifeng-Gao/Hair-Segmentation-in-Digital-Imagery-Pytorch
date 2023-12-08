@@ -123,7 +123,18 @@ class FigaroDataset(Dataset):
 def download_extract(url, root, filename, md5):
     file_path = os.path.join(root, filename)
     download_url(url, root, filename, md5)
+
+    data_dir = os.path.join(root, "Figaro1k")
+    if os.path.isdir(data_dir):
+        for r, dirs, files in os.walk(data_dir, topdown=False):
+            for name in files:
+                os.remove(os.path.join(r, name))
+            for name in dirs:
+                os.rmdir(os.path.join(r, name))
+        os.rmdir(data_dir)
+
     print("Unzip Figaro1k.zip ...")
+
     with zipfile.ZipFile(file_path, 'r') as zip_ref:
         zip_ref.extractall(root)
 
@@ -131,7 +142,6 @@ def download_extract(url, root, filename, md5):
     dir_path = os.path.join(root, "Figaro1k/GT/Training")
 
     pattern = os.path.join(dir_path, "*(1).pbm")
-    print(pattern)
     files_to_remove = glob.glob(pattern)
     for file_path in files_to_remove:
         os.remove(file_path)
