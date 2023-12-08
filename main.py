@@ -186,11 +186,13 @@ def get_dataset(opts):
                                   joint_transforms=train_joint_transforms,
                                   image_transforms=train_image_transforms,
                                   mask_transforms=mask_transforms,
+                                  download=opts.download,
                                   train=True)
         val_dst = FigaroDataset(root_dir=opts.data_root,
                                 joint_transforms=test_joint_transforms,
                                 image_transforms=test_image_transforms,
                                 mask_transforms=mask_transforms,
+                                download=False,
                                 train=False)
     return train_dst, val_dst
 
@@ -256,6 +258,8 @@ def main():
         opts.num_classes = 21
     elif opts.dataset.lower() == 'cityscapes':
         opts.num_classes = 19
+    elif opts.dataset.lower() == 'hair':
+        opts.num_classes = 8
 
     # Setup visualization
     vis = Visualizer(port=opts.vis_port,

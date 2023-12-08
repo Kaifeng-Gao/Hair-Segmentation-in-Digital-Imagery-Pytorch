@@ -1,14 +1,18 @@
+import glob
 import os
+import zipfile
+
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+from torchvision.datasets.utils import download_url, check_integrity
 
 
 class FigaroDataset(Dataset):
     
     cmap = np.array([
-                        [0, 0, 0],        # 背景
+                        [0, 0, 0],        # background
                         [128, 0, 0],      # straight
                         [0, 128, 0],      # wavy
                         [128, 128, 0],    # curly
@@ -16,10 +20,9 @@ class FigaroDataset(Dataset):
                         [128, 0, 128],    # braids
                         [0, 128, 128],    # dreadlocks
                         [128, 128, 128],  # short-men
-                        # ... 以此类推，为每个类别定义颜色
                     ], dtype=np.uint8)
 
-    def __init__(self, root_dir, train=True, joint_transforms=None,
+    def __init__(self, root_dir, train=True, download=False, joint_transforms=None,
                  image_transforms=None, mask_transforms=None, gray_image=False):
         """
         Args:
@@ -30,6 +33,14 @@ class FigaroDataset(Dataset):
             gray_image (bool): whether to return gray image image or not.
                                If True, returns img, mask, gray.
         """
+        self.root = os.path.expanduser(root_dir)
+        self.url = "http://projects.i-ctm.eu/sites/default/files/AltroMateriale/207_Michele%20Svanera/Figaro1k.zip"
+        self.filename = "Figaro1k.zip"
+        self.md5 = None
+
+        if download:
+            download_extract(self.url, self.root, self.filename, self.md5)
+
         mode = 'Training' if train else 'Testing'
         img_dir = os.path.join(root_dir, 'Figaro1k', 'Original', mode)
         mask_dir = os.path.join(root_dir, 'Figaro1k', 'GT', mode)
@@ -108,6 +119,38 @@ class FigaroDataset(Dataset):
         # mask是一个二维数组，其中的每个值对应一个类别标签
         # cmap是一个N x 3的数组，其中N是类别的数目，每一行是对应类别标签的RGB颜色
         return cls.cmap[mask]
+    
+def download_extract(url, root, filename, md5):
+    file_path = os.path.join(root, filename)
+    download_url(url, root, filename, md5)
+    print("Unzip Figaro1k.zip ...")
+    with zipfile.ZipFile(file_path, 'r') as zip_ref:
+        zip_ref.extractall(root)
+
+    print("Removing unnecessary files ...")
+    dir_path = os.path.join(root, "Figaro1k/GT/Training")
+
+    pattern = os.path.join(dir_path, "*(1).pbm")
+    print(pattern)
+    files_to_remove = glob.glob(pattern)
+    for file_path in files_to_remove:
+        os.remove(file_path)
+
+    os.remove(os.path.join(root, "Figaro1k/.DS_Store"))
+    macosx_dir = os.path.join(root, "__MACOSX")
+    if os.path.isdir(macosx_dir):
+        for root, dirs, files in os.walk(macosx_dir, topdown=False):
+            for name in files:
+                os.remove(os.path.join(root, name))
+            for name in dirs:
+                os.rmdir(os.path.join(root, name))
+        os.rmdir(macosx_dir)
+    print("Finished!")
 
 
     
+if __name__ == "__main__":
+    # Assuming the root directory you want to use is "./data"
+    root_dir = "./data"
+    # Instantiate the dataset object with download=True to trigger the download
+    dataset = FigaroDataset(root_dir=root_dir, download=True)
