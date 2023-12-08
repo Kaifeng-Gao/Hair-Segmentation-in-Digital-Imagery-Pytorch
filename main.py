@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 
 from torch.utils import data
-from datasets import VOCSegmentation, Cityscapes
+from datasets import VOCSegmentation, Cityscapes, FigaroDataset
 from utils import ext_transforms as et
 from metrics import StreamSegMetrics
 
@@ -19,6 +19,9 @@ from PIL import Image
 import matplotlib
 import matplotlib.pyplot as plt
 
+import torchvision.transforms as std_trnsf
+from utils import joint_transforms as jnt_trnsf
+
 
 def get_argparser():
     parser = argparse.ArgumentParser()
@@ -26,7 +29,7 @@ def get_argparser():
     # Datset Options
     parser.add_argument("--data_root", type=str, default='./datasets/data',
                         help="path to Dataset")
-    parser.add_argument("--dataset", type=str, default='voc',
+    parser.add_argument("--dataset", type=str, default='hair',
                         choices=['voc', 'cityscapes'], help='Name of dataset')
     parser.add_argument("--num_classes", type=int, default=None,
                         help="num classes (default: None)")
@@ -36,7 +39,7 @@ def get_argparser():
                               not (name.startswith("__") or name.startswith('_')) and callable(
                               network.modeling.__dict__[name])
                               )
-    parser.add_argument("--model", type=str, default='deeplabv3plus_mobilenet',
+    parser.add_argument("--model", type=str, default='deeplabv3_mobilenet',
                         choices=available_models, help='model name')
     parser.add_argument("--separable_conv", action='store_true', default=False,
                         help="apply separable conv to decoder and aspp")
@@ -46,8 +49,8 @@ def get_argparser():
     parser.add_argument("--test_only", action='store_true', default=False)
     parser.add_argument("--save_val_results", action='store_true', default=False,
                         help="save segmentation results to \"./results\"")
-    parser.add_argument("--total_itrs", type=int, default=30e3,
-                        help="epoch number (default: 30k)")
+    parser.add_argument("--total_itrs", type=int, default=100,
+                        help="epoch number (default: 10)")
     parser.add_argument("--lr", type=float, default=0.01,
                         help="learning rate (default: 0.01)")
     parser.add_argument("--lr_policy", type=str, default='poly', choices=['poly', 'step'],
@@ -57,9 +60,9 @@ def get_argparser():
                         help='crop validation (default: False)')
     parser.add_argument("--batch_size", type=int, default=16,
                         help='batch size (default: 16)')
-    parser.add_argument("--val_batch_size", type=int, default=4,
-                        help='batch size for validation (default: 4)')
-    parser.add_argument("--crop_size", type=int, default=513)
+    parser.add_argument("--val_batch_size", type=int, default=3,
+                        help='batch size for validation (default: 3)')
+    parser.add_argument("--crop_size", type=int, default=256)
 
     parser.add_argument("--ckpt", default=None, type=str,
                         help="restore from checkpoint")
@@ -75,9 +78,9 @@ def get_argparser():
                         help="random seed (default: 1)")
     parser.add_argument("--print_interval", type=int, default=10,
                         help="print interval of loss (default: 10)")
-    parser.add_argument("--val_interval", type=int, default=100,
+    parser.add_argument("--val_interval", type=int, default=10,
                         help="epoch interval for eval (default: 100)")
-    parser.add_argument("--download", action='store_true', default=False,
+    parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
 
     # PASCAL VOC Options
@@ -150,6 +153,45 @@ def get_dataset(opts):
                                split='train', transform=train_transform)
         val_dst = Cityscapes(root=opts.data_root,
                              split='val', transform=val_transform)
+    if opts.dataset == 'hair':
+        train_joint_transforms = jnt_trnsf.Compose([
+            jnt_trnsf.RandomCrop(opts.crop_size),
+            jnt_trnsf.RandomRotate(5),
+            jnt_trnsf.RandomHorizontallyFlip()
+        ])
+
+        # transforms only on images
+        train_image_transforms = std_trnsf.Compose([
+            std_trnsf.ColorJitter(0.05, 0.05, 0.05, 0.05),
+            std_trnsf.ToTensor(),
+            std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+        
+        test_joint_transforms = jnt_trnsf.Compose([
+            # jnt_trnsf.Safe32Padding()
+            jnt_trnsf.RandomCrop(opts.crop_size),
+        ])
+
+        test_image_transforms = std_trnsf.Compose([
+            std_trnsf.ToTensor(),
+            std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+
+        # transforms only on mask
+        mask_transforms = std_trnsf.Compose([
+            std_trnsf.ToTensor()
+        ])
+
+        train_dst = FigaroDataset(root_dir=opts.data_root,
+                                  joint_transforms=train_joint_transforms,
+                                  image_transforms=train_image_transforms,
+                                  mask_transforms=mask_transforms,
+                                  train=True)
+        val_dst = FigaroDataset(root_dir=opts.data_root,
+                                joint_transforms=test_joint_transforms,
+                                image_transforms=test_image_transforms,
+                                mask_transforms=mask_transforms,
+                                train=False)
     return train_dst, val_dst
 
 
@@ -229,6 +271,7 @@ def main():
     torch.manual_seed(opts.random_seed)
     np.random.seed(opts.random_seed)
     random.seed(opts.random_seed)
+    
 
     # Setup dataloader
     if opts.dataset == 'voc' and not opts.crop_val:
@@ -322,9 +365,10 @@ def main():
     interval_loss = 0
     while True:  # cur_itrs < opts.total_itrs:
         # =====  Train  =====
+        print("Train starting")
         model.train()
         cur_epochs += 1
-        for (images, labels) in train_loader:
+        for (images, labels) in tqdm(train_loader):
             cur_itrs += 1
 
             images = images.to(device, dtype=torch.float32)
