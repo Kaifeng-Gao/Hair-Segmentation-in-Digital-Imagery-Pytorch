@@ -9,6 +9,35 @@ from torchvision import transforms
 from torchvision.datasets.utils import download_url, check_integrity
 
 
+def get_class_label(filename):
+    """
+    0: straight: frame00001-00150
+    1: wavy: frame00151-00300
+    2: curly: frame00301-00450
+    3: kinky: frame00451-00600
+    4: braids: frame00601-00750
+    5: dreadlocks: frame00751-00900
+    6: short-men: frame00901-01050
+    """
+    idx = int(filename.strip('Frame').strip('-gt.pbm'))
+
+    if 0 < idx <= 150:
+        return 1
+    elif 150 < idx <= 300:
+        return 2
+    elif 300 < idx <= 450:
+        return 3
+    elif 450 < idx <= 600:
+        return 4
+    elif 600 < idx <= 750:
+        return 5
+    elif 750 < idx <= 900:
+        return 6
+    elif 900 < idx <= 1050:
+        return 7
+    raise ValueError
+
+
 class FigaroDataset(Dataset):
     cmap = np.array([
         [0, 0, 0],  # background
@@ -57,14 +86,15 @@ class FigaroDataset(Dataset):
 
         mask_path = self.mask_path_list[idx]
         mask = Image.open(mask_path)
-        print(mask)
-        class_label = self.get_class_label(os.path.basename(mask_path))
+        class_label = get_class_label(os.path.basename(mask_path))
         # 将mask转换为numpy数组
         mask_array = np.array(mask, dtype=np.uint8)
         # 创建一个新的mask，其初始值全为0
         class_mask = np.zeros_like(mask_array)
         # 将对应于原始mask的非零部分的位置设置为类别值
         class_mask[mask_array > 0] = class_label
+        # 将numpy数组转换为PIL Image
+        class_mask = Image.fromarray(class_mask)
         if self.joint_transforms is not None:
             img, class_mask = self.joint_transforms(img, class_mask)
 
@@ -89,34 +119,6 @@ class FigaroDataset(Dataset):
 
     def __len__(self):
         return len(self.mask_path_list)
-
-    def get_class_label(self, filename):
-        """
-        0: straight: frame00001-00150
-        1: wavy: frame00151-00300
-        2: curly: frame00301-00450
-        3: kinky: frame00451-00600
-        4: braids: frame00601-00750
-        5: dreadlocks: frame00751-00900
-        6: short-men: frame00901-01050
-        """
-        idx = int(filename.strip('Frame').strip('-gt.pbm'))
-
-        if 0 < idx <= 150:
-            return 1
-        elif 150 < idx <= 300:
-            return 2
-        elif 300 < idx <= 450:
-            return 3
-        elif 450 < idx <= 600:
-            return 4
-        elif 600 < idx <= 750:
-            return 5
-        elif 750 < idx <= 900:
-            return 6
-        elif 900 < idx <= 1050:
-            return 7
-        raise ValueError
 
     @classmethod
     def decode_target(cls, mask):
@@ -170,4 +172,3 @@ if __name__ == "__main__":
     # Instantiate the dataset object with download=True to trigger the download
     dataset = FigaroDataset(root_dir=root_dir, download=False)
     img, mask = dataset.__getitem__(0)
-    print(mask)
