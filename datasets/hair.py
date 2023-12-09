@@ -10,7 +10,7 @@ from torchvision.datasets.utils import download_url, check_integrity
 
 
 class FigaroDataset(Dataset):
-    
+
     cmap = np.array([
                         [0, 0, 0],        # background
                         [128, 0, 0],      # straight
@@ -59,27 +59,35 @@ class FigaroDataset(Dataset):
         mask_path = self.mask_path_list[idx]
         mask = Image.open(mask_path)
 
+        class_label = self.get_class_label(os.path.basename(img_path))
+        # 将mask转换为numpy数组
+        mask_array = np.array(mask)
+        # 创建一个新的mask，其初始值全为0
+        class_mask = np.zeros_like(mask_array)
+        # 将对应于原始mask的非零部分的位置设置为类别值
+        class_mask[mask_array > 0] = class_label
+
         if self.joint_transforms is not None:
-            img, mask = self.joint_transforms(img, mask)
-    
+            img, class_mask = self.joint_transforms(img, class_mask)
+
         if self.image_transforms is not None:
             img = self.image_transforms(img)
 
         if self.mask_transforms is not None:
-            mask = self.mask_transforms(mask)
-            if mask.ndim == 3 and mask.shape[0] == 1:  # Check if mask has a channel dimension
-                mask = mask.squeeze(0)  # Remove the channel dimension
+            class_mask = self.mask_transforms(class_mask)
+            if class_mask.ndim == 3 and class_mask.shape[0] == 1:  # Check if mask has a channel dimension
+                class_mask = class_mask.squeeze(0)  # Remove the channel dimension
         else:
-            mask = transforms.ToTensor()(mask)
-            if mask.ndim == 3 and mask.shape[0] == 1:  # Check if mask has a channel dimension
-                mask = mask.squeeze(0)  # Remove the channel dimension
+            class_mask = transforms.ToTensor()(class_mask)
+            if class_mask.ndim == 3 and class_mask.shape[0] == 1:  # Check if mask has a channel dimension
+                class_mask = class_mask.squeeze(0)  # Remove the channel dimension
 
         if self.gray_image:
             gray = img.convert('L')
             gray = np.array(gray, dtype=np.float32)[np.newaxis, ] / 255
-            return img, mask, gray
+            return img, class_mask, gray
         else:
-            return img, mask
+            return img, class_mask
 
     def __len__(self):
         return len(self.mask_path_list)
@@ -119,7 +127,7 @@ class FigaroDataset(Dataset):
         # mask是一个二维数组，其中的每个值对应一个类别标签
         # cmap是一个N x 3的数组，其中N是类别的数目，每一行是对应类别标签的RGB颜色
         return cls.cmap[mask]
-    
+
 def download_extract(url, root, filename, md5):
     file_path = os.path.join(root, filename)
     download_url(url, root, filename, md5)
@@ -158,7 +166,7 @@ def download_extract(url, root, filename, md5):
     print("Finished!")
 
 
-    
+
 if __name__ == "__main__":
     # Assuming the root directory you want to use is "./data"
     root_dir = "./data"
