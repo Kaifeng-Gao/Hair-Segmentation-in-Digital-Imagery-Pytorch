@@ -217,7 +217,7 @@ def main():
     elif opts.dataset.lower() == 'cityscapes':
         opts.num_classes = 19
     elif opts.dataset.lower() == 'hair':
-        opts.num_classes = 8
+        opts.num_classes = 7
 
     # Setup visualization
     vis = Visualizer(port=opts.vis_port,
@@ -341,9 +341,30 @@ def main():
 
             optimizer.zero_grad()
             segmentation_outputs, classification_outputs = model(images)
-            segmentation_loss = segmentation_criterion(segmentation_outputs, labels)
-            classification_loss = classification_criterion(classification_outputs, class_labels)
-            loss = segmentation_loss + classification_loss
+            prob_hair = segmentation_outputs[:, 1, :, :].unsqueeze(1)  # Shape: [batch_size, 1, width, height]
+            prob_hair = prob_hair.expand(-1, opts.num_classes, -1, -1) # Shape: [batch_size, 7, width, height]
+            classification_outputs = classification_outputs.unsqueeze(-1).unsqueeze(-1)
+            # Multiply prob_hair with each channel in classification_outputs
+            combined_hair_types = prob_hair * classification_outputs  # Shape: [batch_size, 7, width, height]
+            # Extract the probability of 'not hair' from segmentation_outputs
+            prob_not_hair = segmentation_outputs[:, 0, :, :].unsqueeze(1)  # Shape: [batch_size, 1, width, height]
+            # Combine 'not hair' probability with the hair types probabilities
+            combined_output = torch.cat([prob_not_hair, combined_hair_types],
+                                         dim=1)  # Shape: [batch_size, 8, width, height]
+
+            # classification_outputs_expanded = classification_outputs.unsqueeze(2).unsqueeze(3)
+            # classification_outputs_expanded = nn.functional.softmax(classification_outputs_expanded, dim=1)
+            # segmentation_mask = segmentation_outputs.argmax(dim=1, keepdim=True) == 1
+            # Apply the mask to the classification outputs
+            # combined_output = classification_outputs_expanded * segmentation_mask
+
+            class_labels_expanded = class_labels.view(-1, 1, 1).expand_as(labels)
+            labels = torch.where(labels == 1, class_labels_expanded, labels)
+
+            segmentation_loss = segmentation_criterion(combined_output, labels)
+            # classification_loss = classification_criterion(classification_outputs, class_labels)
+            # loss = segmentation_loss + classification_loss
+            loss = segmentation_loss
             loss.backward()
             optimizer.step()
 
