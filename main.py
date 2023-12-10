@@ -366,14 +366,13 @@ def main():
         return
 
     interval_loss = 0
+    pbar = tqdm(total=opts.total_itrs, desc='Loss: N/A, Val Mean IoU: N/A')
     while True:  # cur_itrs < opts.total_itrs:
         # =====  Train  =====
-        print("Train starting")
         model.train()
         cur_epochs += 1
         for (images, labels) in train_loader:
             cur_itrs += 1
-
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
 
@@ -384,25 +383,24 @@ def main():
             optimizer.step()
 
             np_loss = loss.detach().cpu().numpy()
-            interval_loss += np_loss
             if vis is not None:
                 vis.vis_scalar('Loss', cur_itrs, np_loss)
-
-            if (cur_itrs) % 10 == 0:
-                interval_loss = interval_loss / 10
-                print("Epoch %d, Itrs %d/%d, Loss=%f" %
-                      (cur_epochs, cur_itrs, opts.total_itrs, interval_loss))
-                interval_loss = 0.0
+            pbar.update(1)
+            pbar.set_description(f'Epoch {cur_epochs}, Itrs {cur_itrs}/{opts.total_itrs}, Loss={np_loss:.4f}')
 
             if (cur_itrs) % opts.val_interval == 0:
                 save_ckpt('checkpoints/latest_%s_%s_os%d.pth' %
                           (opts.model, opts.dataset, opts.output_stride))
-                print("validation...")
                 model.eval()
                 val_score, ret_samples = validate(
                     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics,
                     ret_samples_ids=vis_sample_id)
-                print(metrics.to_str(val_score))
+                metrics_message = (f'Overall Acc: {val_score["Overall Acc"]:.4f}, '
+                                   f'Mean IoU: {val_score["Mean IoU"]:.4f}, '
+                                   f'Mean Acc: {val_score["Mean Acc"]:.4f}, '
+                                   f'FreqW Acc: {val_score["FreqW Acc"]:.4f}, '
+                                   f'F1-Score: {val_score["F1-Score"]:.4f}')
+                tqdm.write(metrics_message)
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
                     save_ckpt('checkpoints/best_%s_%s_os%d.pth' %
