@@ -1,23 +1,16 @@
-from torch.utils.data import dataset
 from tqdm import tqdm
 import network
 import utils
 import os
-import random
 import argparse
-import numpy as np
 
-from torch.utils import data
-from datasets import VOCSegmentation, Cityscapes, cityscapes, FigaroDataset
+from datasets import FigaroDataset
 from torchvision import transforms as T
-from metrics import StreamSegMetrics
 
 import torch
 import torch.nn as nn
 
 from PIL import Image
-import matplotlib
-import matplotlib.pyplot as plt
 from glob import glob
 
 
@@ -27,8 +20,8 @@ def get_argparser():
     # Datset Options
     parser.add_argument("--input", type=str, required=True,
                         help="path to a single image or image directory")
-    parser.add_argument("--dataset", type=str, default='voc',
-                        choices=['voc', 'cityscapes', 'hair'], help='Name of training set')
+    parser.add_argument("--dataset", type=str, default='hair',
+                        choices=['hair'], help='Name of training set')
 
     # Deeplab Options
     available_models = sorted(name for name in network.modeling.__dict__ if name.islower() and \
@@ -61,15 +54,8 @@ def get_argparser():
 
 def main():
     opts = get_argparser().parse_args()
-    if opts.dataset.lower() == 'voc':
-        opts.num_classes = 21
-        decode_fn = VOCSegmentation.decode_target
-    elif opts.dataset.lower() == 'cityscapes':
-        opts.num_classes = 19
-        decode_fn = Cityscapes.decode_target
-    elif opts.dataset.lower() == 'hair':
-        opts.num_classes = 8
-        decode_fn = FigaroDataset.decode_target
+    opts.num_classes = 8
+    decode_fn = FigaroDataset.decode_target
 
     os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -92,7 +78,6 @@ def main():
     utils.set_bn_momentum(model.backbone, momentum=0.01)
 
     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
-        # https://github.com/VainF/DeepLabV3Plus-Pytorch/issues/8#issuecomment-605601402, @PytaichukBohdan
         checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint["model_state"])
         model = nn.DataParallel(model)
@@ -100,11 +85,9 @@ def main():
         print("Resume model from %s" % opts.ckpt)
         del checkpoint
     else:
-        print("[!] Retrain")
-        model = nn.DataParallel(model)
-        model.to(device)
-
-    # denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # denormalization for ori images
+        #write code for exiting with an error message
+        print("Checkpoint not found")
+        exit(1)
 
     if opts.crop_val:
         transform = T.Compose([
