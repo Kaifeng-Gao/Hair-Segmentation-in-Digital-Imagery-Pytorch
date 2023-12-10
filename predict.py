@@ -85,7 +85,6 @@ def main():
         print("Resume model from %s" % opts.ckpt)
         del checkpoint
     else:
-        #write code for exiting with an error message
         print("Checkpoint not found")
         exit(1)
 

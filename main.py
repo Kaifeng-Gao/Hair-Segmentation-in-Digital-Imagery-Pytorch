@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import network
 import utils
 import os
@@ -11,7 +12,6 @@ from metrics import StreamSegMetrics
 
 import torch
 import torch.nn as nn
-from utils.visualizer import Visualizer
 
 from PIL import Image
 import matplotlib
@@ -75,15 +75,6 @@ def get_argparser():
     parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
 
-    # Visdom options
-    parser.add_argument("--enable_vis", action='store_true', default=False,
-                        help="use visdom for visualization")
-    parser.add_argument("--vis_port", type=str, default='13570',
-                        help='port for visdom')
-    parser.add_argument("--vis_env", type=str, default='main',
-                        help='env for visdom')
-    parser.add_argument("--vis_num_samples", type=int, default=8,
-                        help='number of samples for visualization (default: 8)')
     return parser
 
 
@@ -148,9 +139,6 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
             targets = labels.cpu().numpy()
 
             metrics.update(targets, preds)
-            if ret_samples_ids is not None and i in ret_samples_ids:  # get vis samples
-                ret_samples.append(
-                    (images[0].detach().cpu().numpy(), targets[0], preds[0]))
 
             if opts.save_val_results:
                 for i in range(len(images)):
@@ -184,12 +172,6 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 def main():
     opts = get_argparser().parse_args()
     opts.num_classes = 8
-
-    # Setup visualization
-    vis = Visualizer(port=opts.vis_port,
-                     env=opts.vis_env) if opts.enable_vis else None
-    if vis is not None:  # display options
-        vis.vis_table("Options", vars(opts))
 
     os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -272,14 +254,12 @@ def main():
         model.to(device)
 
     # ==========   Train Loop   ==========#
-    vis_sample_id = np.random.randint(0, len(val_loader), opts.vis_num_samples,
-                                      np.int32) if opts.enable_vis else None  # sample idxs for visualization
     denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # denormalization for ori images
 
     if opts.test_only:
         model.eval()
         val_score, ret_samples = validate(
-            opts=opts, model=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
+            opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
         print(metrics.to_str(val_score))
         return
 
@@ -301,8 +281,6 @@ def main():
             optimizer.step()
 
             np_loss = loss.detach().cpu().numpy()
-            if vis is not None:
-                vis.vis_scalar('Loss', cur_itrs, np_loss)
             pbar.update(1)
             pbar.set_description(f'Epoch {cur_epochs}, Itrs {cur_itrs}/{opts.total_itrs}, Loss={np_loss:.4f}')
 
@@ -311,26 +289,13 @@ def main():
                           (opts.model, opts.dataset, opts.output_stride))
                 model.eval()
                 val_score, ret_samples = validate(
-                    opts=opts, model=model, loader=val_loader, device=device, metrics=metrics,
-                    ret_samples_ids=vis_sample_id)
+                    opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
                 metrics_message = metrics.to_str(val_score)
                 tqdm.write(metrics_message)
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
                     save_ckpt('checkpoints/best_%s_%s_os%d.pth' %
                               (opts.model, opts.dataset, opts.output_stride))
-
-                if vis is not None:  # visualize validation score and samples
-                    vis.vis_scalar("[Val] Overall Acc", cur_itrs, val_score['Overall Acc'])
-                    vis.vis_scalar("[Val] Mean IoU", cur_itrs, val_score['Mean IoU'])
-                    vis.vis_table("[Val] Class IoU", val_score['Class IoU'])
-
-                    for k, (img, target, lbl) in enumerate(ret_samples):
-                        img = (denorm(img) * 255).astype(np.uint8)
-                        target = train_dst.decode_target(target).transpose(2, 0, 1).astype(np.uint8)
-                        lbl = train_dst.decode_target(lbl).transpose(2, 0, 1).astype(np.uint8)
-                        concat_img = np.concatenate((img, target, lbl), axis=2)  # concat along width
-                        vis.vis_image('Sample %d' % k, concat_img)
                 model.train()
             scheduler.step()
 
