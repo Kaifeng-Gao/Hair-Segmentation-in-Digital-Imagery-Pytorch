@@ -1,5 +1,4 @@
 import numpy as np
-from sklearn.metrics import confusion_matrix
 
 class _StreamMetrics(object):
     def __init__(self):
@@ -40,10 +39,6 @@ class StreamSegMetrics(_StreamMetrics):
         for k, v in results.items():
             if k!="Class IoU":
                 string += "%s: %f\n"%(k, v)
-        
-        #string+='Class IoU:\n'
-        #for k, v in results['Class IoU'].items():
-        #    string += "\tclass %d: %f\n"%(k, v)
         return string
 
     def _fast_hist(self, label_true, label_pred):

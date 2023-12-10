@@ -1,4 +1,3 @@
-from tqdm import tqdm
 import network
 import utils
 import os
@@ -7,8 +6,7 @@ import argparse
 import numpy as np
 
 from torch.utils import data
-from datasets import VOCSegmentation, Cityscapes, FigaroDataset
-from utils import ext_transforms as et
+from datasets import FigaroDataset
 from metrics import StreamSegMetrics
 
 import torch
@@ -30,9 +28,7 @@ def get_argparser():
     parser.add_argument("--data_root", type=str, default='./datasets/data',
                         help="path to Dataset")
     parser.add_argument("--dataset", type=str, default='hair',
-                        choices=['voc', 'cityscapes'], help='Name of dataset')
-    parser.add_argument("--num_classes", type=int, default=None,
-                        help="num classes (default: None)")
+                        choices=['hair'], help='Name of dataset')
 
     # Deeplab Options
     available_models = sorted(name for name in network.modeling.__dict__ if name.islower() and \
@@ -56,8 +52,6 @@ def get_argparser():
     parser.add_argument("--lr_policy", type=str, default='poly', choices=['poly', 'step'],
                         help="learning rate scheduler policy")
     parser.add_argument("--step_size", type=int, default=10000)
-    parser.add_argument("--crop_val", action='store_true', default=False,
-                        help='crop validation (default: False)')
     parser.add_argument("--batch_size", type=int, default=16,
                         help='batch size (default: 16)')
     parser.add_argument("--val_batch_size", type=int, default=3,
@@ -76,16 +70,10 @@ def get_argparser():
                         help='weight decay (default: 1e-4)')
     parser.add_argument("--random_seed", type=int, default=1,
                         help="random seed (default: 1)")
-    parser.add_argument("--print_interval", type=int, default=10,
-                        help="print interval of loss (default: 10)")
     parser.add_argument("--val_interval", type=int, default=10,
                         help="epoch interval for eval (default: 10)")
     parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
-
-    # PASCAL VOC Options
-    parser.add_argument("--year", type=str, default='2012',
-                        choices=['2012_aug', '2012', '2011', '2009', '2008', '2007'], help='year of VOC')
 
     # Visdom options
     parser.add_argument("--enable_vis", action='store_true', default=False,
@@ -102,98 +90,40 @@ def get_argparser():
 def get_dataset(opts):
     """ Dataset And Augmentation
     """
-    if opts.dataset == 'voc':
-        train_transform = et.ExtCompose([
-            # et.ExtResize(size=opts.crop_size),
-            et.ExtRandomScale((0.5, 2.0)),
-            et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size), pad_if_needed=True),
-            et.ExtRandomHorizontalFlip(),
-            et.ExtToTensor(),
-            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
+    train_joint_transforms = jnt_trnsf.Compose([
+        jnt_trnsf.RandomCrop(opts.crop_size),
+        jnt_trnsf.RandomRotate(5),
+        jnt_trnsf.RandomHorizontallyFlip()
+    ])
+
+    # transforms only on images
+    train_image_transforms = std_trnsf.Compose([
+        std_trnsf.ColorJitter(0.05, 0.05, 0.05, 0.05),
+        std_trnsf.ToTensor(),
+        std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
-        if opts.crop_val:
-            val_transform = et.ExtCompose([
-                et.ExtResize(opts.crop_size),
-                et.ExtCenterCrop(opts.crop_size),
-                et.ExtToTensor(),
-                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225]),
-            ])
-        else:
-            val_transform = et.ExtCompose([
-                et.ExtToTensor(),
-                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225]),
-            ])
-        train_dst = VOCSegmentation(root=opts.data_root, year=opts.year,
-                                    image_set='train', download=opts.download, transform=train_transform)
-        val_dst = VOCSegmentation(root=opts.data_root, year=opts.year,
-                                  image_set='val', download=False, transform=val_transform)
+    
+    test_joint_transforms = jnt_trnsf.Compose([
+        jnt_trnsf.RandomCrop(opts.crop_size),
+    ])
 
-    if opts.dataset == 'cityscapes':
-        train_transform = et.ExtCompose([
-            # et.ExtResize( 512 ),
-            et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size)),
-            et.ExtColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
-            et.ExtRandomHorizontalFlip(),
-            et.ExtToTensor(),
-            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-        ])
+    test_image_transforms = std_trnsf.Compose([
+        std_trnsf.ToTensor(),
+        std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
 
-        val_transform = et.ExtCompose([
-            # et.ExtResize( 512 ),
-            et.ExtToTensor(),
-            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-        ])
-
-        train_dst = Cityscapes(root=opts.data_root,
-                               split='train', transform=train_transform)
-        val_dst = Cityscapes(root=opts.data_root,
-                             split='val', transform=val_transform)
-    if opts.dataset == 'hair':
-        train_joint_transforms = jnt_trnsf.Compose([
-            jnt_trnsf.RandomCrop(opts.crop_size),
-            jnt_trnsf.RandomRotate(5),
-            jnt_trnsf.RandomHorizontallyFlip()
-        ])
-
-        # transforms only on images
-        train_image_transforms = std_trnsf.Compose([
-            std_trnsf.ColorJitter(0.05, 0.05, 0.05, 0.05),
-            std_trnsf.ToTensor(),
-            std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
-        
-        test_joint_transforms = jnt_trnsf.Compose([
-            # jnt_trnsf.Safe32Padding()
-            jnt_trnsf.RandomCrop(opts.crop_size),
-        ])
-
-        test_image_transforms = std_trnsf.Compose([
-            std_trnsf.ToTensor(),
-            std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-
-        # transforms only on mask
-        # mask_transforms = std_trnsf.Compose([
-        #     std_trnsf.ToTensor()
-        # ])
-
-        train_dst = FigaroDataset(root_dir=opts.data_root,
-                                  joint_transforms=train_joint_transforms,
-                                  image_transforms=train_image_transforms,
-                                  mask_transforms=None,
-                                  download=opts.download,
-                                  train=True)
-        val_dst = FigaroDataset(root_dir=opts.data_root,
-                                joint_transforms=test_joint_transforms,
-                                image_transforms=test_image_transforms,
+    train_dst = FigaroDataset(root_dir=opts.data_root,
+                                joint_transforms=train_joint_transforms,
+                                image_transforms=train_image_transforms,
                                 mask_transforms=None,
-                                download=False,
-                                train=False)
+                                download=opts.download,
+                                train=True)
+    val_dst = FigaroDataset(root_dir=opts.data_root,
+                            joint_transforms=test_joint_transforms,
+                            image_transforms=test_image_transforms,
+                            mask_transforms=None,
+                            download=False,
+                            train=False)
     return train_dst, val_dst
 
 
@@ -253,12 +183,7 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 
 def main():
     opts = get_argparser().parse_args()
-    if opts.dataset.lower() == 'voc':
-        opts.num_classes = 21
-    elif opts.dataset.lower() == 'cityscapes':
-        opts.num_classes = 19
-    elif opts.dataset.lower() == 'hair':
-        opts.num_classes = 8
+    opts.num_classes = 8
 
     # Setup visualization
     vis = Visualizer(port=opts.vis_port,
@@ -277,9 +202,6 @@ def main():
     
 
     # Setup dataloader
-    if opts.dataset == 'voc' and not opts.crop_val:
-        opts.val_batch_size = 1
-
     train_dst, val_dst = get_dataset(opts)
     train_loader = data.DataLoader(
         train_dst, batch_size=opts.batch_size, shuffle=True, num_workers=2,
@@ -303,15 +225,12 @@ def main():
         {'params': model.backbone.parameters(), 'lr': 0.1 * opts.lr},
         {'params': model.classifier.parameters(), 'lr': opts.lr},
     ], lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
-    # optimizer = torch.optim.SGD(params=model.parameters(), lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
-    # torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.lr_decay_step, gamma=opts.lr_decay_factor)
     if opts.lr_policy == 'poly':
         scheduler = utils.PolyLR(optimizer, opts.total_itrs, power=0.9)
     elif opts.lr_policy == 'step':
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.step_size, gamma=0.1)
 
     # Set up criterion
-    # criterion = utils.get_loss(opts.loss_type)
     if opts.loss_type == 'focal_loss':
         criterion = utils.FocalLoss(ignore_index=255, size_average=True)
     elif opts.loss_type == 'cross_entropy':
@@ -335,7 +254,6 @@ def main():
     cur_itrs = 0
     cur_epochs = 0
     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
-        # https://github.com/VainF/DeepLabV3Plus-Pytorch/issues/8#issuecomment-605601402, @PytaichukBohdan
         checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint["model_state"])
         model = nn.DataParallel(model)
