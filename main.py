@@ -118,10 +118,9 @@ def get_dataset(opts):
     return train_dst, val_dst
 
 
-def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
+def validate(opts, model, loader, device, metrics):
     """Do validation and return specified samples"""
     metrics.reset()
-    ret_samples = []
     if opts.save_val_results:
         if not os.path.exists('results'):
             os.mkdir('results')
@@ -161,12 +160,12 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
                     ax = plt.gca()
                     ax.xaxis.set_major_locator(matplotlib.ticker.NullLocator())
                     ax.yaxis.set_major_locator(matplotlib.ticker.NullLocator())
-                    plt.savefig('results/%d_overlay.png' % img_id, bbox_inches='tight', pad_inches=0)
+                    plt.savefig('results/%d_overlay.png' % img_id)
                     plt.close()
                     img_id += 1
 
         score = metrics.get_results()
-    return score, ret_samples
+    return score
 
 
 def main():
@@ -258,7 +257,7 @@ def main():
 
     if opts.test_only:
         model.eval()
-        val_score, ret_samples = validate(
+        val_score = validate(
             opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
         print(metrics.to_str(val_score))
         return
@@ -288,7 +287,7 @@ def main():
                 save_ckpt('checkpoints/latest_%s_%s_os%d.pth' %
                           (opts.model, opts.dataset, opts.output_stride))
                 model.eval()
-                val_score, ret_samples = validate(
+                val_score = validate(
                     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
                 metrics_message = metrics.to_str(val_score)
                 tqdm.write(metrics_message)
