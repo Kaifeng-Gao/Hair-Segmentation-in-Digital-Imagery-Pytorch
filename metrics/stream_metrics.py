@@ -56,18 +56,19 @@ class StreamSegMetrics(_StreamMetrics):
             - mean IU
             - fwavacc
         """
+        eps = 1e-10
         hist = self.confusion_matrix
         tp = np.diag(hist)
         fp = hist.sum(axis=0) - tp
         fn = hist.sum(axis=1) - tp
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
-        f1 = 2 * (precision * recall) / (precision + recall)
+        precision = tp / (tp + fp + eps)
+        recall = tp / (tp + fn + eps)
+        f1 = 2 * (precision * recall) / (precision + recall + eps)
         mean_f1 = np.nanmean(f1)
         acc = tp.sum() / hist.sum()
         acc_cls = tp / hist.sum(axis=1)
         acc_cls = np.nanmean(acc_cls)
-        iu = tp / (hist.sum(axis=1) + hist.sum(axis=0) - tp)
+        iu = tp / (hist.sum(axis=1) + hist.sum(axis=0) - tp + eps)
         mean_iu = np.nanmean(iu)
         freq = hist.sum(axis=1) / hist.sum()
         fwavacc = (freq[freq > 0] * iu[freq > 0]).sum()
