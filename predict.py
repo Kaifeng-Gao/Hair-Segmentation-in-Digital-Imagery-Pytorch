@@ -132,6 +132,7 @@ def main():
             img = img.to(device)
 
             pred = model(img).max(1)[1].cpu().numpy()[0]  # HW
+            print(pred)
             colorized_preds = decode_fn(pred).astype('uint8')
             colorized_preds = Image.fromarray(colorized_preds)
             if opts.save_val_results_to:

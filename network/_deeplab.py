@@ -8,6 +8,38 @@ from .utils import _SimpleSegmentationModel
 __all__ = ["DeepLabV3"]
 
 
+class MultiTaskDeepLabV3(nn.Module):
+    def __init__(self, backbone, segmentation_head, classification_head):
+        super(MultiTaskDeepLabV3, self).__init__()
+        self.backbone = backbone
+        self.segmentation_head = segmentation_head
+        # Classification head
+        self.classification_head = classification_head
+
+    def forward(self, x):
+        input_shape = x.shape[-2:]
+        features = self.backbone(x)
+
+        segmentation_output = self.segmentation_head(features)
+        segmentation_output = nn.functional.interpolate(segmentation_output, size=input_shape, mode='bilinear', align_corners=False)
+
+        classification_output = self.classification_head(features)
+        return segmentation_output, classification_output
+
+
+class ClassificationHead(nn.Module):
+    def __init__(self, in_channels, num_classes):
+        super(ClassificationHead, self).__init__()
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(in_channels, num_classes)
+        )
+
+    def forward(self, feature):
+        return self.classifier(feature['out'])
+
+
 class DeepLabV3(_SimpleSegmentationModel):
     """
     Implements DeepLabV3 model from

@@ -102,57 +102,7 @@ def get_argparser():
 def get_dataset(opts):
     """ Dataset And Augmentation
     """
-    if opts.dataset == 'voc':
-        train_transform = et.ExtCompose([
-            # et.ExtResize(size=opts.crop_size),
-            et.ExtRandomScale((0.5, 2.0)),
-            et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size), pad_if_needed=True),
-            et.ExtRandomHorizontalFlip(),
-            et.ExtToTensor(),
-            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-        ])
-        if opts.crop_val:
-            val_transform = et.ExtCompose([
-                et.ExtResize(opts.crop_size),
-                et.ExtCenterCrop(opts.crop_size),
-                et.ExtToTensor(),
-                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225]),
-            ])
-        else:
-            val_transform = et.ExtCompose([
-                et.ExtToTensor(),
-                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225]),
-            ])
-        train_dst = VOCSegmentation(root=opts.data_root, year=opts.year,
-                                    image_set='train', download=opts.download, transform=train_transform)
-        val_dst = VOCSegmentation(root=opts.data_root, year=opts.year,
-                                  image_set='val', download=False, transform=val_transform)
 
-    if opts.dataset == 'cityscapes':
-        train_transform = et.ExtCompose([
-            # et.ExtResize( 512 ),
-            et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size)),
-            et.ExtColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
-            et.ExtRandomHorizontalFlip(),
-            et.ExtToTensor(),
-            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-        ])
-
-        val_transform = et.ExtCompose([
-            # et.ExtResize( 512 ),
-            et.ExtToTensor(),
-            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-        ])
-
-        train_dst = Cityscapes(root=opts.data_root,
-                               split='train', transform=train_transform)
-        val_dst = Cityscapes(root=opts.data_root,
-                             split='val', transform=val_transform)
     if opts.dataset == 'hair':
         train_joint_transforms = jnt_trnsf.Compose([
             jnt_trnsf.RandomCrop(opts.crop_size),
@@ -209,13 +159,22 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
         img_id = 0
 
     with torch.no_grad():
-        for i, (images, labels) in enumerate(loader):
+        for i, (images, labels, class_labels) in enumerate(loader):
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
+            class_labels = class_labels.to(device, dtype=torch.long)
+            segmentation_outputs, classification_outputs = model(images)
 
-            outputs = model(images)
-            preds = outputs.detach().max(dim=1)[1].cpu().numpy()
+            segmentation_mask = segmentation_outputs.detach().max(dim=1)[1]
+            classification_labels = classification_outputs.argmax(dim=1)
+            classification_labels = classification_labels.unsqueeze(1).unsqueeze(2)
+            final_segmentation_outputs = segmentation_mask * classification_labels
+            preds = final_segmentation_outputs.cpu().numpy()
+
+            class_labels_expanded = class_labels.view(-1, 1, 1).expand_as(labels)
+            labels = torch.where(labels == 1, class_labels_expanded, labels)
             targets = labels.cpu().numpy()
+
 
             metrics.update(targets, preds)
             if ret_samples_ids is not None and i in ret_samples_ids:  # get vis samples
@@ -301,7 +260,8 @@ def main():
     # Set up optimizer
     optimizer = torch.optim.SGD(params=[
         {'params': model.backbone.parameters(), 'lr': 0.1 * opts.lr},
-        {'params': model.classifier.parameters(), 'lr': opts.lr},
+        {'params': model.segmentation_head.parameters(), 'lr': opts.lr},
+        {'params': model.classification_head.parameters(), 'lr': opts.lr},
     ], lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
     # optimizer = torch.optim.SGD(params=model.parameters(), lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
     # torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.lr_decay_step, gamma=opts.lr_decay_factor)
@@ -313,9 +273,11 @@ def main():
     # Set up criterion
     # criterion = utils.get_loss(opts.loss_type)
     if opts.loss_type == 'focal_loss':
-        criterion = utils.FocalLoss(ignore_index=255, size_average=True)
+        segmentation_criterion = utils.FocalLoss(ignore_index=255, size_average=True)
     elif opts.loss_type == 'cross_entropy':
-        criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
+        segmentation_criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
+
+    classification_criterion = nn.CrossEntropyLoss()
 
     def save_ckpt(path):
         """ save current model
@@ -371,18 +333,21 @@ def main():
         # =====  Train  =====
         model.train()
         cur_epochs += 1
-        for (images, labels) in train_loader:
+        for (images, labels, class_labels) in train_loader:
             cur_itrs += 1
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
+            class_labels = class_labels.to(device, dtype=torch.long)
 
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+            segmentation_outputs, classification_outputs = model(images)
+            segmentation_loss = segmentation_criterion(segmentation_outputs, labels)
+            classification_loss = classification_criterion(classification_outputs, class_labels)
+            loss = segmentation_loss + classification_loss
             loss.backward()
             optimizer.step()
 
-            np_loss = loss.detach().cpu().numpy()
+            np_loss = segmentation_loss.detach().cpu().numpy()
             if vis is not None:
                 vis.vis_scalar('Loss', cur_itrs, np_loss)
             pbar.update(1)

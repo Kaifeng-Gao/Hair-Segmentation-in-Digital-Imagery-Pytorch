@@ -1,5 +1,5 @@
 from .utils import IntermediateLayerGetter
-from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
+from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3, MultiTaskDeepLabV3, ClassificationHead
 from .backbone import (
     resnet,
     mobilenetv2,
@@ -20,13 +20,14 @@ def _segm_hrnet(name, backbone_name, num_classes, pretrained_backbone):
 
     if name=='deeplabv3plus':
         return_layers = {'stage4': 'out', 'layer1': 'low_level'}
-        classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, aspp_dilate)
+        segmentation_head = DeepLabHeadV3Plus(inplanes, low_level_planes, 2, aspp_dilate)
     elif name=='deeplabv3':
         return_layers = {'stage4': 'out'}
-        classifier = DeepLabHead(inplanes, num_classes, aspp_dilate)
+        segmentation_head = DeepLabHead(inplanes, 2, aspp_dilate)
 
     backbone = IntermediateLayerGetter(backbone, return_layers=return_layers, hrnet_flag=True)
-    model = DeepLabV3(backbone, classifier)
+    classification_head = ClassificationHead(inplanes, num_classes)
+    model = MultiTaskDeepLabV3(backbone, segmentation_head, classification_head)
     return model
 
 def _segm_resnet(name, backbone_name, num_classes, output_stride, pretrained_backbone):
@@ -47,13 +48,13 @@ def _segm_resnet(name, backbone_name, num_classes, output_stride, pretrained_bac
 
     if name=='deeplabv3plus':
         return_layers = {'layer4': 'out', 'layer1': 'low_level'}
-        classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, aspp_dilate)
+        segmentation_head = DeepLabHeadV3Plus(inplanes, low_level_planes, 2, aspp_dilate)
     elif name=='deeplabv3':
         return_layers = {'layer4': 'out'}
-        classifier = DeepLabHead(inplanes , num_classes, aspp_dilate)
+        segmentation_head = DeepLabHead(inplanes , 2, aspp_dilate)
     backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
-
-    model = DeepLabV3(backbone, classifier)
+    classification_head = ClassificationHead(inplanes, num_classes)
+    model = MultiTaskDeepLabV3(backbone, segmentation_head, classification_head)
     return model
 
 
@@ -72,12 +73,12 @@ def _segm_xception(name, backbone_name, num_classes, output_stride, pretrained_b
     
     if name=='deeplabv3plus':
         return_layers = {'conv4': 'out', 'block1': 'low_level'}
-        classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, aspp_dilate)
+        segmentation_head = DeepLabHeadV3Plus(inplanes, low_level_planes, 2, aspp_dilate)
     elif name=='deeplabv3':
         return_layers = {'conv4': 'out'}
-        classifier = DeepLabHead(inplanes , num_classes, aspp_dilate)
-    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
-    model = DeepLabV3(backbone, classifier)
+        segmentation_head = DeepLabHead(inplanes , 2, aspp_dilate)
+    classification_head = ClassificationHead(inplanes, num_classes)
+    model = MultiTaskDeepLabV3(backbone, segmentation_head, classification_head)
     return model
 
 
@@ -100,13 +101,13 @@ def _segm_mobilenet(name, backbone_name, num_classes, output_stride, pretrained_
     
     if name=='deeplabv3plus':
         return_layers = {'high_level_features': 'out', 'low_level_features': 'low_level'}
-        classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, aspp_dilate)
+        segmentation_head = DeepLabHeadV3Plus(inplanes, low_level_planes, 2, aspp_dilate)
     elif name=='deeplabv3':
         return_layers = {'high_level_features': 'out'}
-        classifier = DeepLabHead(inplanes , num_classes, aspp_dilate)
+        segmentation_head = DeepLabHead(inplanes , 2, aspp_dilate)
     backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
-
-    model = DeepLabV3(backbone, classifier)
+    classification_head = ClassificationHead(inplanes, num_classes)
+    model = MultiTaskDeepLabV3(backbone, segmentation_head, classification_head)
     return model
 
 def _load_model(arch_type, backbone, num_classes, output_stride, pretrained_backbone):

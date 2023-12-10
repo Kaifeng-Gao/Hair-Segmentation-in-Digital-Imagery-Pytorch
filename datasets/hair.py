@@ -87,16 +87,17 @@ class FigaroDataset(Dataset):
         img = Image.open(img_path)
 
         mask_path = self.mask_path_list[idx]
-        mask = Image.open(mask_path)
+        # mask = Image.open(mask_path)
+        class_mask = Image.open(mask_path)
         class_label = get_class_label(os.path.basename(mask_path))
         # 将mask转换为numpy数组
-        mask_array = np.array(mask, dtype=np.uint8)
+        # mask_array = np.array(mask, dtype=np.uint8)
         # 创建一个新的mask，其初始值全为0
-        class_mask = np.zeros_like(mask_array)
+        # class_mask = np.zeros_like(mask_array)
         # 将对应于原始mask的非零部分的位置设置为类别值
-        class_mask[mask_array > 0] = class_label
+        # class_mask[mask_array > 0] = class_label
         # 将numpy数组转换为PIL Image
-        class_mask = Image.fromarray(class_mask)
+        # class_mask = Image.fromarray(class_mask)
 
 
         if self.joint_transforms is not None:
@@ -114,12 +115,7 @@ class FigaroDataset(Dataset):
             if class_mask.ndim == 3 and class_mask.shape[0] == 1:  # Check if mask has a channel dimension
                 class_mask = class_mask.squeeze(0)  # Remove the channel dimension
 
-        if self.gray_image:
-            gray = img.convert('L')
-            gray = np.array(gray, dtype=np.float32)[np.newaxis,] / 255
-            return img, class_mask, gray
-        else:
-            return img, class_mask
+        return img, class_mask, class_label
 
     def __len__(self):
         return len(self.mask_path_list)
