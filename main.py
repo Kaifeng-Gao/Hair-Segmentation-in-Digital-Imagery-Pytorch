@@ -78,8 +78,8 @@ def get_argparser():
                         help="random seed (default: 1)")
     parser.add_argument("--print_interval", type=int, default=10,
                         help="print interval of loss (default: 10)")
-    parser.add_argument("--val_interval", type=int, default=100,
-                        help="epoch interval for eval (default: 100)")
+    parser.add_argument("--val_interval", type=int, default=10,
+                        help="epoch interval for eval (default: 10)")
     parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
 
@@ -178,20 +178,20 @@ def get_dataset(opts):
         ])
 
         # transforms only on mask
-        mask_transforms = std_trnsf.Compose([
-            std_trnsf.ToTensor()
-        ])
+        # mask_transforms = std_trnsf.Compose([
+        #     std_trnsf.ToTensor()
+        # ])
 
         train_dst = FigaroDataset(root_dir=opts.data_root,
                                   joint_transforms=train_joint_transforms,
                                   image_transforms=train_image_transforms,
-                                  mask_transforms=mask_transforms,
+                                  mask_transforms=None,
                                   download=opts.download,
                                   train=True)
         val_dst = FigaroDataset(root_dir=opts.data_root,
                                 joint_transforms=test_joint_transforms,
                                 image_transforms=test_image_transforms,
-                                mask_transforms=mask_transforms,
+                                mask_transforms=None,
                                 download=False,
                                 train=False)
     return train_dst, val_dst
@@ -210,7 +210,6 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 
     with torch.no_grad():
         for i, (images, labels) in enumerate(loader):
-
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
 

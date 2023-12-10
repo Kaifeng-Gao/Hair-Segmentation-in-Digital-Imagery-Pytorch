@@ -4,9 +4,11 @@ import zipfile
 
 import numpy as np
 from PIL import Image
+import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision.datasets.utils import download_url, check_integrity
+import matplotlib.pyplot as plt
 
 
 def get_class_label(filename):
@@ -95,6 +97,8 @@ class FigaroDataset(Dataset):
         class_mask[mask_array > 0] = class_label
         # 将numpy数组转换为PIL Image
         class_mask = Image.fromarray(class_mask)
+
+
         if self.joint_transforms is not None:
             img, class_mask = self.joint_transforms(img, class_mask)
 
@@ -106,7 +110,7 @@ class FigaroDataset(Dataset):
             if class_mask.ndim == 3 and class_mask.shape[0] == 1:  # Check if mask has a channel dimension
                 class_mask = class_mask.squeeze(0)  # Remove the channel dimension
         else:
-            class_mask = transforms.ToTensor()(class_mask)
+            class_mask = torch.from_numpy(np.array(class_mask, dtype=np.int64))
             if class_mask.ndim == 3 and class_mask.shape[0] == 1:  # Check if mask has a channel dimension
                 class_mask = class_mask.squeeze(0)  # Remove the channel dimension
 
@@ -171,4 +175,4 @@ if __name__ == "__main__":
     root_dir = "./data"
     # Instantiate the dataset object with download=True to trigger the download
     dataset = FigaroDataset(root_dir=root_dir, download=False)
-    img, mask = dataset.__getitem__(0)
+    img, mask = dataset.__getitem__(200)
