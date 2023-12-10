@@ -395,11 +395,7 @@ def main():
                 val_score, ret_samples = validate(
                     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics,
                     ret_samples_ids=vis_sample_id)
-                metrics_message = (f'Overall Acc: {val_score["Overall Acc"]:.4f}, '
-                                   f'Mean IoU: {val_score["Mean IoU"]:.4f}, '
-                                   f'Mean Acc: {val_score["Mean Acc"]:.4f}, '
-                                   f'FreqW Acc: {val_score["FreqW Acc"]:.4f}, '
-                                   f'F1-Score: {val_score["F1-Score"]:.4f}')
+                metrics_message = metrics.to_str(val_score)
                 tqdm.write(metrics_message)
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
