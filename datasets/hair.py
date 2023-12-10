@@ -6,9 +6,7 @@ import numpy as np
 from PIL import Image
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
-from torchvision.datasets.utils import download_url, check_integrity
-import matplotlib.pyplot as plt
+from torchvision.datasets.utils import download_url
 
 
 def get_class_label(filename):
