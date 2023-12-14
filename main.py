@@ -7,13 +7,11 @@ import argparse
 import numpy as np
 
 from torch.utils import data
-from datasets import VOCSegmentation, Cityscapes, FigaroDataset
-from utils import ext_transforms as et
+from datasets import FigaroDataset
 from metrics import StreamSegMetrics
 
 import torch
 import torch.nn as nn
-from utils.visualizer import Visualizer
 
 from PIL import Image
 import matplotlib
@@ -21,6 +19,7 @@ import matplotlib.pyplot as plt
 
 import torchvision.transforms as std_trnsf
 from utils import joint_transforms as jnt_trnsf
+import segmentation_models_pytorch as smp
 
 
 def get_argparser():
@@ -30,26 +29,24 @@ def get_argparser():
     parser.add_argument("--data_root", type=str, default='./datasets/data',
                         help="path to Dataset")
     parser.add_argument("--dataset", type=str, default='hair',
-                        choices=['voc', 'cityscapes'], help='Name of dataset')
-    parser.add_argument("--num_classes", type=int, default=None,
-                        help="num classes (default: None)")
+                        choices=['hair'], help='Name of dataset')
 
-    # Deeplab Options
+    # Model Options
     available_models = sorted(name for name in network.modeling.__dict__ if name.islower() and \
                               not (name.startswith("__") or name.startswith('_')) and callable(
                               network.modeling.__dict__[name])
                               )
     parser.add_argument("--model", type=str, default='deeplabv3_mobilenet',
                         choices=available_models, help='model name')
-    parser.add_argument("--separable_conv", action='store_true', default=False,
-                        help="apply separable conv to decoder and aspp")
+    parser.add_argument("--encoder", type=str, default='resnet101', choices=['mobilenet_v2', 'resnet101', 'resnet50'],
+                        help="encoder name")
     parser.add_argument("--output_stride", type=int, default=16, choices=[8, 16])
 
     # Train Options
     parser.add_argument("--test_only", action='store_true', default=False)
     parser.add_argument("--save_val_results", action='store_true', default=False,
                         help="save segmentation results to \"./results\"")
-    parser.add_argument("--total_itrs", type=int, default=100,
+    parser.add_argument("--total_itrs", type=int, default=500,
                         help="epoch number (default: 10)")
     parser.add_argument("--lr", type=float, default=0.01,
                         help="learning rate (default: 0.01)")
@@ -76,74 +73,51 @@ def get_argparser():
                         help='weight decay (default: 1e-4)')
     parser.add_argument("--random_seed", type=int, default=1,
                         help="random seed (default: 1)")
-    parser.add_argument("--print_interval", type=int, default=10,
-                        help="print interval of loss (default: 10)")
-    parser.add_argument("--val_interval", type=int, default=10,
+    parser.add_argument("--val_interval", type=int, default=100,
                         help="epoch interval for eval (default: 10)")
     parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
 
-    # PASCAL VOC Options
-    parser.add_argument("--year", type=str, default='2012',
-                        choices=['2012_aug', '2012', '2011', '2009', '2008', '2007'], help='year of VOC')
-
-    # Visdom options
-    parser.add_argument("--enable_vis", action='store_true', default=False,
-                        help="use visdom for visualization")
-    parser.add_argument("--vis_port", type=str, default='13570',
-                        help='port for visdom')
-    parser.add_argument("--vis_env", type=str, default='main',
-                        help='env for visdom')
-    parser.add_argument("--vis_num_samples", type=int, default=8,
-                        help='number of samples for visualization (default: 8)')
     return parser
 
 
 def get_dataset(opts):
     """ Dataset And Augmentation
     """
+    train_joint_transforms = jnt_trnsf.Compose([
+        jnt_trnsf.RandomCrop(opts.crop_size),
+        jnt_trnsf.RandomRotate(5),
+        jnt_trnsf.RandomHorizontallyFlip()
+    ])
 
-    if opts.dataset == 'hair':
-        train_joint_transforms = jnt_trnsf.Compose([
-            jnt_trnsf.RandomCrop(opts.crop_size),
-            jnt_trnsf.RandomRotate(5),
-            jnt_trnsf.RandomHorizontallyFlip()
+    # transforms only on images
+    train_image_transforms = std_trnsf.Compose([
+        std_trnsf.ColorJitter(0.05, 0.05, 0.05, 0.05),
+        std_trnsf.ToTensor(),
+        std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
+    
+    test_joint_transforms = jnt_trnsf.Compose([
+        jnt_trnsf.RandomCrop(opts.crop_size),
+    ])
 
-        # transforms only on images
-        train_image_transforms = std_trnsf.Compose([
-            std_trnsf.ColorJitter(0.05, 0.05, 0.05, 0.05),
-            std_trnsf.ToTensor(),
-            std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
-        
-        test_joint_transforms = jnt_trnsf.Compose([
-            # jnt_trnsf.Safe32Padding()
-            jnt_trnsf.RandomCrop(opts.crop_size),
-        ])
+    test_image_transforms = std_trnsf.Compose([
+        std_trnsf.ToTensor(),
+        std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
 
-        test_image_transforms = std_trnsf.Compose([
-            std_trnsf.ToTensor(),
-            std_trnsf.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-
-        # transforms only on mask
-        # mask_transforms = std_trnsf.Compose([
-        #     std_trnsf.ToTensor()
-        # ])
-
-        train_dst = FigaroDataset(root_dir=opts.data_root,
-                                  joint_transforms=train_joint_transforms,
-                                  image_transforms=train_image_transforms,
-                                  mask_transforms=None,
-                                  download=opts.download,
-                                  train=True)
-        val_dst = FigaroDataset(root_dir=opts.data_root,
-                                joint_transforms=test_joint_transforms,
-                                image_transforms=test_image_transforms,
+    train_dst = FigaroDataset(root_dir=opts.data_root,
+                                joint_transforms=train_joint_transforms,
+                                image_transforms=train_image_transforms,
                                 mask_transforms=None,
-                                download=False,
-                                train=False)
+                                download=opts.download,
+                                train=True)
+    val_dst = FigaroDataset(root_dir=opts.data_root,
+                            joint_transforms=test_joint_transforms,
+                            image_transforms=test_image_transforms,
+                            mask_transforms=None,
+                            download=False,
+                            train=False)
     return train_dst, val_dst
 
 
@@ -175,11 +149,7 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
             labels = torch.where(labels == 1, class_labels_expanded, labels)
             targets = labels.cpu().numpy()
 
-
             metrics.update(targets, preds)
-            if ret_samples_ids is not None and i in ret_samples_ids:  # get vis samples
-                ret_samples.append(
-                    (images[0].detach().cpu().numpy(), targets[0], preds[0]))
 
             if opts.save_val_results:
                 for i in range(len(images)):
@@ -207,23 +177,12 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
                     img_id += 1
 
         score = metrics.get_results()
-    return score, ret_samples
+    return score
 
 
 def main():
     opts = get_argparser().parse_args()
-    if opts.dataset.lower() == 'voc':
-        opts.num_classes = 21
-    elif opts.dataset.lower() == 'cityscapes':
-        opts.num_classes = 19
-    elif opts.dataset.lower() == 'hair':
-        opts.num_classes = 8
-
-    # Setup visualization
-    vis = Visualizer(port=opts.vis_port,
-                     env=opts.vis_env) if opts.enable_vis else None
-    if vis is not None:  # display options
-        vis.vis_table("Options", vars(opts))
+    opts.num_classes = 8
 
     os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -236,22 +195,17 @@ def main():
     
 
     # Setup dataloader
-    if opts.dataset == 'voc' and not opts.crop_val:
-        opts.val_batch_size = 1
-
     train_dst, val_dst = get_dataset(opts)
     train_loader = data.DataLoader(
         train_dst, batch_size=opts.batch_size, shuffle=True, num_workers=2,
-        drop_last=True)  # drop_last=True to ignore single-image batches.
+        drop_last=True)
     val_loader = data.DataLoader(
         val_dst, batch_size=opts.val_batch_size, shuffle=True, num_workers=2)
     print("Dataset: %s, Train set: %d, Val set: %d" %
           (opts.dataset, len(train_dst), len(val_dst)))
 
-    # Set up model (all models are 'constructed at network.modeling)
+    # Set up model
     model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride)
-    if opts.separable_conv and 'plus' in opts.model:
-        network.convert_to_separable_conv(model.classifier)
     utils.set_bn_momentum(model.backbone, momentum=0.01)
 
     # Set up metrics
@@ -263,15 +217,12 @@ def main():
         {'params': model.segmentation_head.parameters(), 'lr': opts.lr},
         {'params': model.classification_head.parameters(), 'lr': opts.lr},
     ], lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
-    # optimizer = torch.optim.SGD(params=model.parameters(), lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
-    # torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.lr_decay_step, gamma=opts.lr_decay_factor)
     if opts.lr_policy == 'poly':
         scheduler = utils.PolyLR(optimizer, opts.total_itrs, power=0.9)
     elif opts.lr_policy == 'step':
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.step_size, gamma=0.1)
 
     # Set up criterion
-    # criterion = utils.get_loss(opts.loss_type)
     if opts.loss_type == 'focal_loss':
         segmentation_criterion = utils.FocalLoss(ignore_index=255, size_average=True)
     elif opts.loss_type == 'cross_entropy':
@@ -289,7 +240,6 @@ def main():
             "scheduler_state": scheduler.state_dict(),
             "best_score": best_score,
         }, path)
-        # print("Model saved as %s" % path)
 
     utils.mkdir('checkpoints')
     # Restore
@@ -297,7 +247,6 @@ def main():
     cur_itrs = 0
     cur_epochs = 0
     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
-        # https://github.com/VainF/DeepLabV3Plus-Pytorch/issues/8#issuecomment-605601402, @PytaichukBohdan
         checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint["model_state"])
         model = nn.DataParallel(model)
@@ -316,14 +265,12 @@ def main():
         model.to(device)
 
     # ==========   Train Loop   ==========#
-    vis_sample_id = np.random.randint(0, len(val_loader), opts.vis_num_samples,
-                                      np.int32) if opts.enable_vis else None  # sample idxs for visualization
     denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # denormalization for ori images
 
     if opts.test_only:
         model.eval()
-        val_score, ret_samples = validate(
-            opts=opts, model=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
+        val_score = validate(
+            opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
         print(metrics.to_str(val_score))
         return
 
@@ -348,8 +295,6 @@ def main():
             optimizer.step()
 
             np_loss = segmentation_loss.detach().cpu().numpy()
-            if vis is not None:
-                vis.vis_scalar('Loss', cur_itrs, np_loss)
             pbar.update(1)
             pbar.set_description(f'Epoch {cur_epochs}, Itrs {cur_itrs}/{opts.total_itrs}, Loss={np_loss:.4f}')
 
@@ -357,27 +302,14 @@ def main():
                 save_ckpt('checkpoints/latest_%s_%s_os%d.pth' %
                           (opts.model, opts.dataset, opts.output_stride))
                 model.eval()
-                val_score, ret_samples = validate(
-                    opts=opts, model=model, loader=val_loader, device=device, metrics=metrics,
-                    ret_samples_ids=vis_sample_id)
+                val_score = validate(
+                    opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
                 metrics_message = metrics.to_str(val_score)
                 tqdm.write(metrics_message)
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
                     save_ckpt('checkpoints/best_%s_%s_os%d.pth' %
                               (opts.model, opts.dataset, opts.output_stride))
-
-                if vis is not None:  # visualize validation score and samples
-                    vis.vis_scalar("[Val] Overall Acc", cur_itrs, val_score['Overall Acc'])
-                    vis.vis_scalar("[Val] Mean IoU", cur_itrs, val_score['Mean IoU'])
-                    vis.vis_table("[Val] Class IoU", val_score['Class IoU'])
-
-                    for k, (img, target, lbl) in enumerate(ret_samples):
-                        img = (denorm(img) * 255).astype(np.uint8)
-                        target = train_dst.decode_target(target).transpose(2, 0, 1).astype(np.uint8)
-                        lbl = train_dst.decode_target(lbl).transpose(2, 0, 1).astype(np.uint8)
-                        concat_img = np.concatenate((img, target, lbl), axis=2)  # concat along width
-                        vis.vis_image('Sample %d' % k, concat_img)
                 model.train()
             scheduler.step()
 

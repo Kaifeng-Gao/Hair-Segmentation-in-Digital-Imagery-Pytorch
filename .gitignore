@@ -1,5 +1,4 @@
 __pycache__
-VOCdevkit
 checkpoints
 .vscode
 *.pyc
@@ -7,6 +6,5 @@ checkpoints
 __pycache__
 results
 checkpoints_bak
-cityscapes
 test_results
 datasets/data
