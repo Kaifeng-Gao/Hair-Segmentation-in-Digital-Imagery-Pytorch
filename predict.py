@@ -31,7 +31,7 @@ def get_argparser():
         network.modeling.__dict__[name])
                               )
 
-    parser.add_argument("--model", type=str, default='deeplabv3plus_mobilenet',
+    parser.add_argument("--model", type=str, default='deeplabv3_mobilenet',
                         choices=available_models, help='model name')
     parser.add_argument("--encoder", type=str, default='resnet101', choices=['mobilenet_v2', 'resnet101', 'resnet50'],
                         help="encoder name")

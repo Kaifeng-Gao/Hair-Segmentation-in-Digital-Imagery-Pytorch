@@ -5,10 +5,6 @@ import os
 
 __all__ = ['HRNet', 'hrnetv2_48', 'hrnetv2_32']
 
-# Checkpoint path of pre-trained backbone (edit to your path). Download backbone pretrained model hrnetv2-32 @
-# https://drive.google.com/file/d/1NxCK7Zgn5PmeS7W1jYLt5J9E0RRZ2oyF/view?usp=sharing .Personally, I added the backbone
-# weights to the folder /checkpoints
-
 model_urls = {
     'hrnetv2_32': './checkpoints/model_best_epoch96_edit.pth',
     'hrnetv2_48': None
