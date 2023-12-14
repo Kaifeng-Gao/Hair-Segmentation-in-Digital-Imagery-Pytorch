@@ -112,8 +112,13 @@ def main():
             img = Image.open(img_path).convert('RGB')
             img = transform(img).unsqueeze(0)  # To tensor of NCHW
             img = img.to(device)
+            segmentation_outputs, classification_outputs = model(img)
+            segmentation_mask = segmentation_outputs.detach().max(dim=1)[1]
+            classification_labels = classification_outputs.argmax(dim=1)
+            classification_labels = classification_labels.unsqueeze(1).unsqueeze(2)
+            final_segmentation_outputs = segmentation_mask * classification_labels
+            pred = final_segmentation_outputs.cpu().numpy()[0]
 
-            pred = model(img).max(1)[1].cpu().numpy()[0]  # HW
             colorized_preds = decode_fn(pred).astype('uint8')
             colorized_preds = Image.fromarray(colorized_preds)
             if opts.save_val_results_to:
