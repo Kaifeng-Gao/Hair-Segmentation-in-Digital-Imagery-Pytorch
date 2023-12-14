@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 
 import torchvision.transforms as std_trnsf
 from utils import joint_transforms as jnt_trnsf
+import segmentation_models_pytorch as smp
 
 
 def get_argparser():
@@ -31,12 +32,10 @@ def get_argparser():
                         choices=['hair'], help='Name of dataset')
 
     # Deeplab Options
-    available_models = sorted(name for name in network.modeling.__dict__ if name.islower() and \
-                              not (name.startswith("__") or name.startswith('_')) and callable(
-                              network.modeling.__dict__[name])
-                              )
-    parser.add_argument("--model", type=str, default='deeplabv3_mobilenet',
-                        choices=available_models, help='model name')
+    parser.add_argument("--model", type=str, default='DeepLabV3Plus',
+                        choices=["Unet", "UnetPlusPlus", "FPN", "PAN", "PSPNet", "DeepLabV3", "DeepLabV3Plus"], help='model name')
+    parser.add_argument("--encoder", type=str, default='resnet101', choices=['mobilenet_v2', 'resnet101', 'resnet50'],
+                        help="encoder name")
     parser.add_argument("--separable_conv", action='store_true', default=False,
                         help="apply separable conv to decoder and aspp")
     parser.add_argument("--output_stride", type=int, default=16, choices=[8, 16])
@@ -45,7 +44,7 @@ def get_argparser():
     parser.add_argument("--test_only", action='store_true', default=False)
     parser.add_argument("--save_val_results", action='store_true', default=False,
                         help="save segmentation results to \"./results\"")
-    parser.add_argument("--total_itrs", type=int, default=100,
+    parser.add_argument("--total_itrs", type=int, default=500,
                         help="epoch number (default: 10)")
     parser.add_argument("--lr", type=float, default=0.01,
                         help="learning rate (default: 0.01)")
@@ -70,7 +69,7 @@ def get_argparser():
                         help='weight decay (default: 1e-4)')
     parser.add_argument("--random_seed", type=int, default=1,
                         help="random seed (default: 1)")
-    parser.add_argument("--val_interval", type=int, default=10,
+    parser.add_argument("--val_interval", type=int, default=100,
                         help="epoch interval for eval (default: 10)")
     parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
@@ -186,25 +185,28 @@ def main():
     train_dst, val_dst = get_dataset(opts)
     train_loader = data.DataLoader(
         train_dst, batch_size=opts.batch_size, shuffle=True, num_workers=2,
-        drop_last=True)  # drop_last=True to ignore single-image batches.
+        drop_last=True)
     val_loader = data.DataLoader(
         val_dst, batch_size=opts.val_batch_size, shuffle=True, num_workers=2)
     print("Dataset: %s, Train set: %d, Val set: %d" %
           (opts.dataset, len(train_dst), len(val_dst)))
 
-    # Set up model (all models are 'constructed at network.modeling)
-    model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride)
-    if opts.separable_conv and 'plus' in opts.model:
-        network.convert_to_separable_conv(model.classifier)
-    utils.set_bn_momentum(model.backbone, momentum=0.01)
+    # Set up model
+    model_class = getattr(smp, opts.model)
+    model = model_class(
+        encoder_name=opts.encoder,
+        in_channels=3,
+        classes=8,
+    )
+    utils.set_bn_momentum(model.encoder, momentum=0.01)
 
     # Set up metrics
     metrics = StreamSegMetrics(opts.num_classes)
 
     # Set up optimizer
     optimizer = torch.optim.SGD(params=[
-        {'params': model.backbone.parameters(), 'lr': 0.1 * opts.lr},
-        {'params': model.classifier.parameters(), 'lr': opts.lr},
+        {'params': model.encoder.parameters(), 'lr': 0.1 * opts.lr},
+        {'params': model.segmentation_head.parameters(), 'lr': opts.lr},
     ], lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
     if opts.lr_policy == 'poly':
         scheduler = utils.PolyLR(optimizer, opts.total_itrs, power=0.9)
@@ -227,7 +229,6 @@ def main():
             "scheduler_state": scheduler.state_dict(),
             "best_score": best_score,
         }, path)
-        # print("Model saved as %s" % path)
 
     utils.mkdir('checkpoints')
     # Restore
@@ -264,7 +265,7 @@ def main():
 
     interval_loss = 0
     pbar = tqdm(total=opts.total_itrs, desc='Loss: N/A, Val Mean IoU: N/A')
-    while True:  # cur_itrs < opts.total_itrs:
+    while True:
         # =====  Train  =====
         model.train()
         cur_epochs += 1
@@ -284,8 +285,8 @@ def main():
             pbar.set_description(f'Epoch {cur_epochs}, Itrs {cur_itrs}/{opts.total_itrs}, Loss={np_loss:.4f}')
 
             if (cur_itrs) % opts.val_interval == 0:
-                save_ckpt('checkpoints/latest_%s_%s_os%d.pth' %
-                          (opts.model, opts.dataset, opts.output_stride))
+                save_ckpt('checkpoints/latest_%s_%s_%s_os%d.pth' %
+                          (opts.model, opts.encoder, opts.dataset, opts.output_stride))
                 model.eval()
                 val_score = validate(
                     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
@@ -293,8 +294,8 @@ def main():
                 tqdm.write(metrics_message)
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
-                    save_ckpt('checkpoints/best_%s_%s_os%d.pth' %
-                              (opts.model, opts.dataset, opts.output_stride))
+                    save_ckpt('checkpoints/best_%s_%s_%s_os%d.pth' %
+                              (opts.model, opts.encoder, opts.dataset, opts.output_stride))
                 model.train()
             scheduler.step()
 
