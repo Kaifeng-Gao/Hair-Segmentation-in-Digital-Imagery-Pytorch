@@ -41,14 +41,14 @@ def get_argparser():
     parser.add_argument("--test_only", action='store_true', default=False)
     parser.add_argument("--save_val_results", action='store_true', default=False,
                         help="save segmentation results to \"./results\"")
-    parser.add_argument("--total_itrs", type=int, default=500,
+    parser.add_argument("--total_itrs", type=int, default=21000,
                         help="epoch number (default: 10)")
-    parser.add_argument("--lr", type=float, default=0.01,
+    parser.add_argument("--lr", type=float, default=0.002,
                         help="learning rate (default: 0.01)")
     parser.add_argument("--lr_policy", type=str, default='poly', choices=['poly', 'step'],
                         help="learning rate scheduler policy")
     parser.add_argument("--step_size", type=int, default=10000)
-    parser.add_argument("--batch_size", type=int, default=16,
+    parser.add_argument("--batch_size", type=int, default=4,
                         help='batch size (default: 16)')
     parser.add_argument("--val_batch_size", type=int, default=3,
                         help='batch size for validation (default: 3)')
@@ -66,7 +66,7 @@ def get_argparser():
                         help='weight decay (default: 1e-4)')
     parser.add_argument("--random_seed", type=int, default=1,
                         help="random seed (default: 1)")
-    parser.add_argument("--val_interval", type=int, default=100,
+    parser.add_argument("--val_interval", type=int, default=210,
                         help="epoch interval for eval (default: 10)")
     parser.add_argument("--download", action='store_true', default=True,
                         help="download datasets")
@@ -195,6 +195,7 @@ def main():
         in_channels=3,
         classes=opts.num_classes,
     )
+    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
     utils.set_bn_momentum(model.encoder, momentum=0.01)
 
     # Set up metrics
