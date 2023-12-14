@@ -1,5 +1,4 @@
 from tqdm import tqdm
-import network
 import utils
 import os
 import random
@@ -31,13 +30,11 @@ def get_argparser():
     parser.add_argument("--dataset", type=str, default='hair',
                         choices=['hair'], help='Name of dataset')
 
-    # Deeplab Options
+    # Model Options
     parser.add_argument("--model", type=str, default='DeepLabV3Plus',
                         choices=["Unet", "UnetPlusPlus", "FPN", "PAN", "PSPNet", "DeepLabV3", "DeepLabV3Plus"], help='model name')
     parser.add_argument("--encoder", type=str, default='resnet101', choices=['mobilenet_v2', 'resnet101', 'resnet50'],
                         help="encoder name")
-    parser.add_argument("--separable_conv", action='store_true', default=False,
-                        help="apply separable conv to decoder and aspp")
     parser.add_argument("--output_stride", type=int, default=16, choices=[8, 16])
 
     # Train Options

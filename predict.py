@@ -1,5 +1,4 @@
 from tqdm import tqdm
-import network
 import utils
 import os
 import argparse
@@ -9,9 +8,11 @@ from torchvision import transforms as T
 
 import torch
 import torch.nn as nn
+import numpy as np
 
-from PIL import Image
+from PIL import Image, ImageOps
 from glob import glob
+import segmentation_models_pytorch as smp
 
 
 def get_argparser():
@@ -23,16 +24,11 @@ def get_argparser():
     parser.add_argument("--dataset", type=str, default='hair',
                         choices=['hair'], help='Name of training set')
 
-    # Deeplab Options
-    available_models = sorted(name for name in network.modeling.__dict__ if name.islower() and \
-                              not (name.startswith("__") or name.startswith('_')) and callable(
-        network.modeling.__dict__[name])
-                              )
-
-    parser.add_argument("--model", type=str, default='deeplabv3plus_mobilenet',
-                        choices=available_models, help='model name')
-    parser.add_argument("--separable_conv", action='store_true', default=False,
-                        help="apply separable conv to decoder and aspp")
+    # Model Options
+    parser.add_argument("--model", type=str, default='DeepLabV3Plus',
+                        choices=["Unet", "UnetPlusPlus", "FPN", "PAN", "PSPNet", "DeepLabV3", "DeepLabV3Plus"], help='model name')
+    parser.add_argument("--encoder", type=str, default='resnet101', choices=['mobilenet_v2', 'resnet101', 'resnet50'],
+                        help="encoder name")
     parser.add_argument("--output_stride", type=int, default=16, choices=[8, 16])
 
     # Train Options
@@ -51,6 +47,14 @@ def get_argparser():
                         help="GPU ID")
     return parser
 
+def pad_image(img, target_height, target_width):
+    pad_height = target_height - img.size[1]
+    pad_width = target_width - img.size[0]
+
+    padding = (pad_width // 2, pad_height // 2, pad_width - (pad_width // 2), pad_height - (pad_height // 2))
+    padded_img = ImageOps.expand(img, border=padding, fill='white')
+
+    return padded_img
 
 def main():
     opts = get_argparser().parse_args()
@@ -71,11 +75,14 @@ def main():
     elif os.path.isfile(opts.input):
         image_files.append(opts.input)
 
-    # Set up model (all models are 'constructed at network.modeling)
-    model = network.modeling.__dict__[opts.model](num_classes=opts.num_classes, output_stride=opts.output_stride)
-    if opts.separable_conv and 'plus' in opts.model:
-        network.convert_to_separable_conv(model.classifier)
-    utils.set_bn_momentum(model.backbone, momentum=0.01)
+    # Set up model
+    model_class = getattr(smp, opts.model)
+    model = model_class(
+        encoder_name=opts.encoder,
+        in_channels=3,
+        classes=8,
+    )
+    utils.set_bn_momentum(model.encoder, momentum=0.01)
 
     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
         checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
@@ -110,6 +117,11 @@ def main():
             ext = os.path.basename(img_path).split('.')[-1]
             img_name = os.path.basename(img_path)[:-len(ext) - 1]
             img = Image.open(img_path).convert('RGB')
+
+            target_height = int(np.ceil(img.size[1] / 16) * 16)
+            target_width = int(np.ceil(img.size[0] / 16) * 16)
+            img = pad_image(img, target_height, target_width)
+
             img = transform(img).unsqueeze(0)  # To tensor of NCHW
             img = img.to(device)
 
