@@ -166,7 +166,7 @@ def validate(opts, model, loader, device, metrics):
 
 def main():
     opts = get_argparser().parse_args()
-    opts.num_classes = 8
+    opts.num_classes = 2
 
     os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -193,7 +193,7 @@ def main():
     model = model_class(
         encoder_name=opts.encoder,
         in_channels=3,
-        classes=8,
+        classes=opts.num_classes,
     )
     utils.set_bn_momentum(model.encoder, momentum=0.01)
 

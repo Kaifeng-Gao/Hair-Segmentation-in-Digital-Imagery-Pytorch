@@ -21,6 +21,8 @@ def get_class_label(filename):
     """
     idx = int(filename.strip('Frame').strip('-gt.pbm'))
 
+    return 1
+
     if 0 < idx <= 150:
         return 1
     elif 150 < idx <= 300:
@@ -41,12 +43,12 @@ def get_class_label(filename):
 class FigaroDataset(Dataset):
     cmap = np.array([
         [0, 0, 0],  # background
-        [128, 0, 0],  # straight
-        [0, 128, 0],  # wavy
-        [128, 128, 0],  # curly
-        [0, 0, 128],  # kinky
-        [128, 0, 128],  # braids
-        [0, 128, 128],  # dreadlocks
+        # [128, 0, 0],  # straight
+        # [0, 128, 0],  # wavy
+        # [128, 128, 0],  # curly
+        # [0, 0, 128],  # kinky
+        # [128, 0, 128],  # braids
+        # [0, 128, 128],  # dreadlocks
         [128, 128, 128],  # short-men
     ], dtype=np.uint8)
 

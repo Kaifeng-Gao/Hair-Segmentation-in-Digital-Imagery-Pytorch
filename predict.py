@@ -58,7 +58,7 @@ def pad_image(img, target_height, target_width):
 
 def main():
     opts = get_argparser().parse_args()
-    opts.num_classes = 8
+    opts.num_classes = 2
     decode_fn = FigaroDataset.decode_target
 
     os.environ['CUDA_VISIBLE_DEVICES'] = opts.gpu_id
@@ -80,7 +80,7 @@ def main():
     model = model_class(
         encoder_name=opts.encoder,
         in_channels=3,
-        classes=8,
+        classes=opts.num_classes,
     )
     utils.set_bn_momentum(model.encoder, momentum=0.01)
 
