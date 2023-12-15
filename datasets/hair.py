@@ -5,11 +5,12 @@ import zipfile
 import numpy as np
 from PIL import Image
 import torch
+from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 from torchvision.datasets.utils import download_url
 
 
-def get_class_label(filename):
+def get_class_label(filename, binary=True):
     """
     0: straight: frame00001-00150
     1: wavy: frame00151-00300
@@ -20,40 +21,30 @@ def get_class_label(filename):
     6: short-men: frame00901-01050
     """
     idx = int(filename.strip('Frame').strip('-gt.pbm'))
-
-    return 1
-
-    if 0 < idx <= 150:
+    if binary:
         return 1
-    elif 150 < idx <= 300:
-        return 2
-    elif 300 < idx <= 450:
-        return 3
-    elif 450 < idx <= 600:
-        return 4
-    elif 600 < idx <= 750:
-        return 5
-    elif 750 < idx <= 900:
-        return 6
-    elif 900 < idx <= 1050:
-        return 7
-    raise ValueError
+    else:
+        if 0 < idx <= 150:
+            return 1
+        elif 150 < idx <= 300:
+            return 2
+        elif 300 < idx <= 450:
+            return 3
+        elif 450 < idx <= 600:
+            return 4
+        elif 600 < idx <= 750:
+            return 5
+        elif 750 < idx <= 900:
+            return 6
+        elif 900 < idx <= 1050:
+            return 7
+        raise ValueError
 
 
 class FigaroDataset(Dataset):
-    cmap = np.array([
-        [0, 0, 0],  # background
-        # [128, 0, 0],  # straight
-        # [0, 128, 0],  # wavy
-        # [128, 128, 0],  # curly
-        # [0, 0, 128],  # kinky
-        # [128, 0, 128],  # braids
-        # [0, 128, 128],  # dreadlocks
-        [128, 128, 128],  # short-men
-    ], dtype=np.uint8)
 
-    def __init__(self, root_dir, train=True, download=False, joint_transforms=None,
-                 image_transforms=None, mask_transforms=None, gray_image=False):
+    def __init__(self, root_dir, mode='train', download=False, joint_transforms=None,
+                 image_transforms=None, mask_transforms=None, gray_image=False, binary=True):
         """
         Args:
             root_dir (str): root directory of dataset
@@ -71,16 +62,50 @@ class FigaroDataset(Dataset):
         if download:
             download_extract(self.url, self.root, self.filename, self.md5)
 
-        mode = 'Training' if train else 'Testing'
-        img_dir = os.path.join(root_dir, 'Figaro1k', 'Original', mode)
-        mask_dir = os.path.join(root_dir, 'Figaro1k', 'GT', mode)
+        if mode not in ['train', 'val', 'test']:
+            raise ValueError("Mode must be 'train', 'val', or 'test'")
+        if mode == 'train' or mode == 'val':
+            img_dir = os.path.join(root_dir, 'Figaro1k', 'Original', 'Training')
+            mask_dir = os.path.join(root_dir, 'Figaro1k', 'GT', 'Training')
+        elif mode == 'test':
+            img_dir = os.path.join(root_dir, 'Figaro1k', 'Original', 'Testing')
+            mask_dir = os.path.join(root_dir, 'Figaro1k', 'GT', 'Testing')
+        img_path_list = [os.path.join(img_dir, img) for img in sorted(os.listdir(img_dir))]
+        mask_path_list = [os.path.join(mask_dir, mask) for mask in sorted(os.listdir(mask_dir))]
 
-        self.img_path_list = [os.path.join(img_dir, img) for img in sorted(os.listdir(img_dir))]
-        self.mask_path_list = [os.path.join(mask_dir, mask) for mask in sorted(os.listdir(mask_dir))]
+        train_imgs, val_imgs, train_masks, val_masks = train_test_split(
+            img_path_list, mask_path_list, test_size=0.2, random_state=42)
+        if mode == 'train':
+            self.img_path_list = train_imgs
+            self.mask_path_list = train_masks
+        elif mode == 'val':
+            self.img_path_list = val_imgs
+            self.mask_path_list = val_masks
+        else:
+            self.img_path_list = img_path_list
+            self.mask_path_list = mask_path_list
+
         self.joint_transforms = joint_transforms
         self.image_transforms = image_transforms
         self.mask_transforms = mask_transforms
         self.gray_image = gray_image
+        self.binary = binary
+        if binary:
+            self.cmap = np.array([
+                [0, 0, 0],  # background
+                [128, 128, 128],  # hair
+            ], dtype=np.uint8)
+        else:
+            self.cmap = np.array([
+                [0, 0, 0],  # background
+                [128, 0, 0],  # straight
+                [0, 128, 0],  # wavy
+                [128, 128, 0],  # curly
+                [0, 0, 128],  # kinky
+                [128, 0, 128],  # braids
+                [0, 128, 128],  # dreadlocks
+                [128, 128, 128],  # short-men
+            ], dtype=np.uint8)
 
     def __getitem__(self, idx):
         img_path = self.img_path_list[idx]
@@ -88,16 +113,11 @@ class FigaroDataset(Dataset):
 
         mask_path = self.mask_path_list[idx]
         mask = Image.open(mask_path)
-        class_label = get_class_label(os.path.basename(mask_path))
-        # 将mask转换为numpy数组
+        class_label = get_class_label(os.path.basename(mask_path), binary=self.binary)
         mask_array = np.array(mask, dtype=np.uint8)
-        # 创建一个新的mask，其初始值全为0
         class_mask = np.zeros_like(mask_array)
-        # 将对应于原始mask的非零部分的位置设置为类别值
         class_mask[mask_array > 0] = class_label
-        # 将numpy数组转换为PIL Image
         class_mask = Image.fromarray(class_mask)
-
 
         if self.joint_transforms is not None:
             img, class_mask = self.joint_transforms(img, class_mask)
@@ -124,12 +144,9 @@ class FigaroDataset(Dataset):
     def __len__(self):
         return len(self.mask_path_list)
 
-    @classmethod
-    def decode_target(cls, mask):
+    def decode_target(self, mask):
         """decode semantic mask to RGB image"""
-        # mask是一个二维数组，其中的每个值对应一个类别标签
-        # cmap是一个N x 3的数组，其中N是类别的数目，每一行是对应类别标签的RGB颜色
-        return cls.cmap[mask]
+        return self.cmap[mask]
 
 
 def download_extract(url, root, filename, md5):
