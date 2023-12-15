@@ -4,6 +4,7 @@ import os
 import argparse
 
 from datasets import FigaroDataset
+from metrics import StreamSegMetrics
 from torchvision import transforms as T
 
 import torch
@@ -83,6 +84,7 @@ def main():
         classes=opts.num_classes,
     )
     utils.set_bn_momentum(model.encoder, momentum=0.01)
+    metrics = StreamSegMetrics(opts.num_classes)
 
     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
         checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
@@ -124,13 +126,19 @@ def main():
 
             img = transform(img).unsqueeze(0)  # To tensor of NCHW
             img = img.to(device)
-
             pred = model(img).max(1)[1].cpu().numpy()[0]  # HW
+
+            label_path = img_path.replace("Original", "GT").replace("-org.jpg", "-gt.pbm")
+            label = pad_image(Image.open(label_path), target_height, target_width)
+            targets = np.array(label)
+
+            metrics.update(targets, pred)
             colorized_preds = decode_fn(pred).astype('uint8')
             colorized_preds = Image.fromarray(colorized_preds)
             if opts.save_val_results_to:
                 colorized_preds.save(os.path.join(opts.save_val_results_to, img_name + '.png'))
-
+        metrics_message = metrics.to_str(metrics.get_results())
+        tqdm.write(metrics_message)
 
 if __name__ == '__main__':
     main()
