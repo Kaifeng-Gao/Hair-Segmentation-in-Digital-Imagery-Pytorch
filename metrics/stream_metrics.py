@@ -37,8 +37,7 @@ class StreamSegMetrics(_StreamMetrics):
     def to_str(results):
         string = "\n"
         for k, v in results.items():
-            if k!="Class IoU":
-                string += "%s: %f\n"%(k, v)
+            string += "%s: %f\n"%(k, v)
         return string
 
     def _fast_hist(self, label_true, label_pred):
@@ -76,10 +75,7 @@ class StreamSegMetrics(_StreamMetrics):
 
         return {
                 "Overall Acc": acc,
-                "Mean Acc": acc_cls,
-                "FreqW Acc": fwavacc,
                 "Mean IoU": mean_iu,
-                "Class IoU": cls_iu,
                 "F1-Score": mean_f1
             }
         

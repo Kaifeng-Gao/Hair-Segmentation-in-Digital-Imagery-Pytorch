@@ -195,7 +195,6 @@ def main():
         in_channels=3,
         classes=opts.num_classes,
     )
-    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
     utils.set_bn_momentum(model.encoder, momentum=0.01)
 
     # Set up metrics

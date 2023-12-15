@@ -1,5 +1,69 @@
-torch
-torchvision
-numpy
-tqdm
-matplotlib
+Brotli @ file:///C:/ci_311/brotli-split_1676435766766/work
+certifi @ file:///C:/b/abs_91u83siphd/croot/certifi_1700501720658/work/certifi
+cffi @ file:///C:/b/abs_924gv1kxzj/croot/cffi_1700254355075/work
+charset-normalizer @ file:///tmp/build/80754af9/charset-normalizer_1630003229654/work
+colorama==0.4.6
+contourpy==1.2.0
+cryptography @ file:///C:/b/abs_e8cnom_zw_/croot/cryptography_1702071486468/work
+cycler==0.12.1
+efficientnet-pytorch==0.7.1
+enum34==1.1.10
+filelock @ file:///C:/b/abs_f2gie28u58/croot/filelock_1700591233643/work
+fonttools==4.46.0
+fsspec==2023.12.1
+gmpy2 @ file:///C:/ci_311/gmpy2_1677743390134/work
+huggingface-hub==0.19.4
+idna @ file:///C:/ci_311/idna_1676424932545/work
+Jinja2 @ file:///C:/ci_311/jinja2_1676424968965/work
+joblib==1.3.2
+jsonpatch==1.33
+jsonpointer==2.4
+kiwisolver==1.4.5
+MarkupSafe @ file:///C:/ci_311/markupsafe_1676424152318/work
+matplotlib==3.8.2
+mkl-fft @ file:///C:/b/abs_19i1y8ykas/croot/mkl_fft_1695058226480/work
+mkl-random @ file:///C:/b/abs_edwkj1_o69/croot/mkl_random_1695059866750/work
+mkl-service==2.4.0
+mpmath @ file:///C:/b/abs_7833jrbiox/croot/mpmath_1690848321154/work
+munch==4.0.0
+networkx @ file:///C:/b/abs_e6gi1go5op/croot/networkx_1690562046966/work
+numpy @ file:///C:/b/abs_7267ja_mqz/croot/numpy_and_numpy_base_1701295083047/work/dist/numpy-1.26.2-cp311-cp311-win_amd64.whl#sha256=f4e43aff0bd2ec1e69abffbe07459b4dcf6ae207942d293dd3c14112aa00d380
+opencv-contrib-python==4.8.1.78
+opencv-python==4.8.1.78
+packaging==23.2
+pandas==2.1.4
+Pillow @ file:///C:/b/abs_20ztcm8lgk/croot/pillow_1696580089746/work
+pretrainedmodels==0.7.4
+psutil==5.9.6
+py-cpuinfo==9.0.0
+pycparser @ file:///tmp/build/80754af9/pycparser_1636541352034/work
+pyOpenSSL @ file:///C:/b/abs_08f38zyck4/croot/pyopenssl_1690225407403/work
+pyparsing==3.1.1
+PySocks @ file:///C:/ci_311/pysocks_1676425991111/work
+python-dateutil==2.8.2
+pytorch-ignite==0.4.13
+pytz==2023.3.post1
+PyYAML @ file:///C:/b/abs_782o3mbw7z/croot/pyyaml_1698096085010/work
+requests @ file:///C:/b/abs_316c2inijk/croot/requests_1690400295842/work
+safetensors==0.4.1
+scikit-learn==1.3.2
+scipy==1.11.4
+seaborn==0.13.0
+segmentation-models-pytorch==0.3.3
+six==1.16.0
+sympy @ file:///C:/b/abs_82njkonm7f/croot/sympy_1701397685028/work
+thop==0.1.1.post2209072238
+threadpoolctl==3.2.0
+timm==0.9.2
+torch==2.1.1
+torchaudio==2.1.1
+torchsummary==1.5.1
+torchvision==0.16.1
+tornado==6.3.3
+tqdm==4.66.1
+typing_extensions @ file:///C:/b/abs_213vg2cd1l/croot/typing_extensions_1690297804941/work
+tzdata==2023.3
+ultralytics==8.0.227
+urllib3 @ file:///C:/b/abs_9cmlsrm3ys/croot/urllib3_1698257595508/work
+websocket-client==1.6.4
+win-inet-pton @ file:///C:/ci_311/win_inet_pton_1676425458225/work
