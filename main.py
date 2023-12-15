@@ -100,18 +100,27 @@ def get_dataset(opts):
     ])
 
     train_dst = FigaroDataset(root_dir=opts.data_root,
-                                joint_transforms=train_joint_transforms,
-                                image_transforms=train_image_transforms,
-                                mask_transforms=None,
-                                download=opts.download,
-                                train=True)
+                            joint_transforms=train_joint_transforms,
+                            image_transforms=train_image_transforms,
+                            mask_transforms=None,
+                            download=opts.download,
+                            binary=True if opts.num_classes == 2 else False,
+                            mode='train')
     val_dst = FigaroDataset(root_dir=opts.data_root,
                             joint_transforms=test_joint_transforms,
                             image_transforms=test_image_transforms,
                             mask_transforms=None,
                             download=False,
-                            train=False)
-    return train_dst, val_dst
+                            binary=True if opts.num_classes == 2 else False,
+                            mode='val')
+    test_dst = FigaroDataset(root_dir=opts.data_root,
+                             joint_transforms=test_joint_transforms,
+                             image_transforms=test_image_transforms,
+                             mask_transforms=None,
+                             download=False,
+                             binary=True if opts.num_classes == 2 else False,
+                             mode='test')
+    return train_dst, val_dst, test_dst
 
 
 def validate(opts, model, loader, device, metrics):
@@ -179,14 +188,16 @@ def main():
     
 
     # Setup dataloader
-    train_dst, val_dst = get_dataset(opts)
+    train_dst, val_dst, test_dst = get_dataset(opts)
     train_loader = data.DataLoader(
         train_dst, batch_size=opts.batch_size, shuffle=True, num_workers=2,
         drop_last=True)
     val_loader = data.DataLoader(
         val_dst, batch_size=opts.val_batch_size, shuffle=True, num_workers=2)
-    print("Dataset: %s, Train set: %d, Val set: %d" %
-          (opts.dataset, len(train_dst), len(val_dst)))
+    test_loader = data.DataLoader(
+        test_dst, batch_size=opts.val_batch_size, shuffle=True, num_workers=2)
+    print("Dataset: %s, Train set: %d, Val set: %d, Test set: %d" %
+          (opts.dataset, len(train_dst), len(val_dst), len(test_dst)))
 
     # Set up model
     model_class = getattr(smp, opts.model)
@@ -256,7 +267,7 @@ def main():
     if opts.test_only:
         model.eval()
         val_score = validate(
-            opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
+            opts=opts, model=model, loader=test_loader, device=device, metrics=metrics)
         print(metrics.to_str(val_score))
         return
 
