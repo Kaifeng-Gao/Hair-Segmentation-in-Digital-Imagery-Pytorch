@@ -42,17 +42,19 @@ def get_class_label(filename, binary=True):
 
 
 class FigaroDataset(Dataset):
+    cmap = np.array([
+                [0, 0, 0],  # background
+                [128, 128, 128],  # hair
+            ], dtype=np.uint8)
 
     def __init__(self, root_dir, mode='train', download=False, joint_transforms=None,
-                 image_transforms=None, mask_transforms=None, gray_image=False, binary=True):
+                 image_transforms=None, mask_transforms=None):
         """
         Args:
             root_dir (str): root directory of dataset
             joint_transforms (torchvision.transforms.Compose): tranformation on both data and target
             image_transforms (torchvision.transforms.Compose): tranformation only on data
             mask_transforms (torchvision.transforms.Compose): tranformation only on target
-            gray_image (bool): whether to return gray image image or not.
-                               If True, returns img, mask, gray.
         """
         self.root = os.path.expanduser(root_dir)
         self.url = "http://projects.i-ctm.eu/sites/default/files/AltroMateriale/207_Michele%20Svanera/Figaro1k.zip"
@@ -73,8 +75,10 @@ class FigaroDataset(Dataset):
         img_path_list = [os.path.join(img_dir, img) for img in sorted(os.listdir(img_dir))]
         mask_path_list = [os.path.join(mask_dir, mask) for mask in sorted(os.listdir(mask_dir))]
 
-        train_imgs, val_imgs, train_masks, val_masks = train_test_split(
-            img_path_list, mask_path_list, test_size=0.2, random_state=42)
+        train_imgs, val_imgs, train_masks, val_masks = train_test_split(img_path_list,
+                                                                        mask_path_list,
+                                                                        test_size=0.2,
+                                                                        random_state=42)
         if mode == 'train':
             self.img_path_list = train_imgs
             self.mask_path_list = train_masks
@@ -88,24 +92,6 @@ class FigaroDataset(Dataset):
         self.joint_transforms = joint_transforms
         self.image_transforms = image_transforms
         self.mask_transforms = mask_transforms
-        self.gray_image = gray_image
-        self.binary = binary
-        if binary:
-            self.cmap = np.array([
-                [0, 0, 0],  # background
-                [128, 128, 128],  # hair
-            ], dtype=np.uint8)
-        else:
-            self.cmap = np.array([
-                [0, 0, 0],  # background
-                [128, 0, 0],  # straight
-                [0, 128, 0],  # wavy
-                [128, 128, 0],  # curly
-                [0, 0, 128],  # kinky
-                [128, 0, 128],  # braids
-                [0, 128, 128],  # dreadlocks
-                [128, 128, 128],  # short-men
-            ], dtype=np.uint8)
 
     def __getitem__(self, idx):
         img_path = self.img_path_list[idx]
@@ -113,7 +99,7 @@ class FigaroDataset(Dataset):
 
         mask_path = self.mask_path_list[idx]
         mask = Image.open(mask_path)
-        class_label = get_class_label(os.path.basename(mask_path), binary=self.binary)
+        class_label = get_class_label(os.path.basename(mask_path), binary=True)
         mask_array = np.array(mask, dtype=np.uint8)
         class_mask = np.zeros_like(mask_array)
         class_mask[mask_array > 0] = class_label
@@ -134,19 +120,15 @@ class FigaroDataset(Dataset):
             if class_mask.ndim == 3 and class_mask.shape[0] == 1:  # Check if mask has a channel dimension
                 class_mask = class_mask.squeeze(0)  # Remove the channel dimension
 
-        if self.gray_image:
-            gray = img.convert('L')
-            gray = np.array(gray, dtype=np.float32)[np.newaxis,] / 255
-            return img, class_mask, gray
-        else:
-            return img, class_mask
+        return img, class_mask
 
     def __len__(self):
         return len(self.mask_path_list)
 
-    def decode_target(self, mask):
+    @classmethod
+    def decode_target(cls, mask):
         """decode semantic mask to RGB image"""
-        return self.cmap[mask]
+        return cls.cmap[mask]
 
 
 def download_extract(url, root, filename, md5):
@@ -184,7 +166,7 @@ def download_extract(url, root, filename, md5):
             for name in dirs:
                 os.rmdir(os.path.join(root, name))
         os.rmdir(macosx_dir)
-    print("Finished!")
+    print("Finished Downloading!")
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@ def get_argparser():
                         help="random seed (default: 1)")
     parser.add_argument("--val_interval", type=int, default=210,
                         help="epoch interval for eval (default: 210)")
-    parser.add_argument("--download", action='store_true', default=True,
+    parser.add_argument("--download", action='store_true', default=False,
                         help="download datasets")
 
     return parser
@@ -104,21 +104,18 @@ def get_dataset(opts):
                             image_transforms=train_image_transforms,
                             mask_transforms=None,
                             download=opts.download,
-                            binary=True if opts.num_classes == 2 else False,
                             mode='train')
     val_dst = FigaroDataset(root_dir=opts.data_root,
                             joint_transforms=test_joint_transforms,
                             image_transforms=test_image_transforms,
                             mask_transforms=None,
                             download=False,
-                            binary=True if opts.num_classes == 2 else False,
                             mode='val')
     test_dst = FigaroDataset(root_dir=opts.data_root,
                              joint_transforms=test_joint_transforms,
                              image_transforms=test_image_transforms,
                              mask_transforms=None,
                              download=False,
-                             binary=True if opts.num_classes == 2 else False,
                              mode='test')
     return train_dst, val_dst, test_dst
 
