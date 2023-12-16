@@ -3,9 +3,13 @@
 Pretrained DeepLabv3+, PAN, PSPNet for Figaro1k, implemented in Pytorch.
 
 ## Quick Start
-1. Download pretrained model ([Google Drive][1]) and put it under `./checkpoints`:
-2. (Optional) Download dataset ([Figaro1K][2]) and put it under `./datasets/data`: 
-3. Load pretrained model and visualize segmentation result on test set: `python main.py --test_only --save_val_results --download --ckpt checkpoints/best_PAN_resnet101_hair_os16.pth --model PAN`
+1. Prepare the environment: `pip install -r requirements.txt`
+2. Download pretrained model ([Google Drive][1]) and put it under `./checkpoints`:
+3. (Optional) Download dataset ([Figaro1K][2]) and put it under `./datasets/data`: 
+4. Load pretrained model and visualize segmentation result on test set
+```bash
+python main.py --test_only --save_val_results --download --ckpt checkpoints/best_PAN_resnet101_hair_os16.pth --model PAN
+```
 
 ![][3]
 ## Prediction
@@ -59,6 +63,17 @@ python main.py --dataset hair --download --model PAN --total_itrs 100 --val_inte
 ```
 
 ## Results
+
+| Parameter      | Value   |
+|----------------|---------|
+| Epoch Number   | 100     |
+| Learning Rate  | 2e-3    |
+| Batch Size     | 4       |
+| Weight Decay   | 1e-4    |
+| Momentum       | 0.9     |
+| Encoder        | ResNet101    |
+| Optimizer      | SGD          |
+| Loss Function  | Cross Entropy|
 
 | Model         | Overall Accuracy | Mean IoU | F1-Score |
 | :------------ | :--------------: | :------: | :------: |
